@@ -16,7 +16,7 @@ terraform apply \
   -var 'bootstrap_principal_arn=arn:aws:iam::<acct>:user/redevops-demo-bootstrap' \
   -var 'monthly_budget_usd=100' \
   -var 'budget_notify_emails=["you@redevops.io"]' \
-  -var 'repo_url=https://github.com/redevops-io/redevops-aws-demo.git'
+  -var 'repo_url=https://github.com/redevops-io/redevops-demo.git'
 ```
 
 ## Then write Vault (privileged token)

@@ -109,7 +109,7 @@ def build_http_runtime(operator_urls: dict, transport=None) -> MissionRuntime:
     return MissionRuntime(reg, Executor(client), store=EventStore())
 
 
-def create_deploy_mission(rt: MissionRuntime, goal: str = "Deploy the redevops-aws-demo repo to AWS"):
+def create_deploy_mission(rt: MissionRuntime, goal: str = "Deploy the redevops-demo repo to AWS"):
     # scan:read → placeholder scanner (local build_runtime); ecr:read → edge-sentinel (HTTP/SIM=0 path).
     # Both provide `image_scanned`; granting both lets one mission definition drive either scanner.
     grants = ["infra:read", "infra:write", "scan:read", "ecr:read"]

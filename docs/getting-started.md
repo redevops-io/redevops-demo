@@ -59,7 +59,7 @@ credentials**, and **deployer permissions**. Cost Explorer and Bedrock show as *
 have, not required to deploy.
 
 ## Step 6 — Deploy (governed, one prompt)
-In Projects: *"Deploy the redevops-aws-demo repo to AWS."* Sidekick inspects the repo, plans the
+In Projects: *"Deploy the redevops-demo repo to AWS."* Sidekick inspects the repo, plans the
 infrastructure, shows the **cost estimate**, and **pauses at an approval gate**. Approve → it
 provisions real EKS + Helm monitoring + the security spine, then asks if it should keep monitoring.
 

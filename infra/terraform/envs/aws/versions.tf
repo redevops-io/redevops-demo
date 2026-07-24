@@ -15,7 +15,7 @@ provider "aws" {
   default_tags {
     tags = {
       demo    = "aws"
-      project = "redevops-aws-demo"
+      project = "redevops-demo"
       env     = var.environment
       ttl     = var.ttl
     }

@@ -4,7 +4,7 @@
 # Mission Runtime calls). AWS creds are NEVER put here — Sidekick resolves them from
 # Vault via aws_demo.creds (STS assume-role).
 
-name: redevops-aws-demo
+name: redevops-demo
 
 services:
   # Projects cockpit + Mission Runtime (the governed execution kernel).

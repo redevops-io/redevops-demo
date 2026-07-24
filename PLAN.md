@@ -1,17 +1,17 @@
 # ReDevOps × AWS — Real-Time Deploy-and-Operate Demo — Build Plan (v2)
 
 **Status:** proposal for review · no code/provisioning until approved
-**Home:** `redevops-aws-demo` (new repo — and, self-referentially, the thing the demo deploys)
+**Home:** `redevops-demo` (new repo — and, self-referentially, the thing the demo deploys)
 **Decisions locked:** reuse real **EKS**; **new AWS account/role** for Bedrock/AgentCore (later phase); new demo repo; plan-first; **AWS creds resolved from local Vault**.
 
 ---
 
 ## 1. The demo, as an on-camera script
 
-The repo is **self-demonstrating**: `redevops-aws-demo` *contains* the Terraform + Ansible that Sidekick deploys, so the demo deploys itself onto AWS and then operates itself.
+The repo is **self-demonstrating**: `redevops-demo` *contains* the Terraform + Ansible that Sidekick deploys, so the demo deploys itself onto AWS and then operates itself.
 
 1. **Bring up Projects + Sidekick** via the one-click guide (`redevops.io/projects` → `docker compose up` / `helm install`). Cockpit opens.
-2. **Prompt Sidekick:** *"Deploy the `redevops-aws-demo` repo on AWS."* Sidekick resolves **AWS creds from the local Vault**, inspects the repo, recommends the architecture, estimates cost, and **pauses at the approval gate**.
+2. **Prompt Sidekick:** *"Deploy the `redevops-demo` repo on AWS."* Sidekick resolves **AWS creds from the local Vault**, inspects the repo, recommends the architecture, estimates cost, and **pauses at the approval gate**.
 3. **Approve → provision + deploy.** Terraform stands up **EKS** (+ ECR, EFS, Secrets); a **self-managed monitoring stack is Helm-installed** (kube-prometheus-stack + Loki/Promtail — *not* CloudWatch-managed); the demo workloads roll out, including **edge-sentinel** and the security/compliance operators.
 4. **Sidekick reports what rolled out** and asks *"Should I monitor this deployment continuously?"* → user: **"yes"** → the standing monitor + response-mission loop arms against the Helm monitoring services.
 5. **edge-sentinel inspects every image** pushed to ECR and used by the deployment (ECR enhanced scanning / Inspector findings + its own analysis) and **reports results** in Projects.
@@ -56,7 +56,7 @@ The "wow": one sentence → a real AWS deployment that **secures, hardens, monit
 - **Outreach demo** (from the last screencast) — the post-deploy "new goal" target; already a working stack.
 
 **GREENFIELD — build:**
-1. `redevops-aws-demo` self-referential **Terraform+Ansible** (EKS + ECR + **Helm monitoring stack** + workloads), wired to the real infra operator behind `/invoke`.
+1. `redevops-demo` self-referential **Terraform+Ansible** (EKS + ECR + **Helm monitoring stack** + workloads), wired to the real infra operator behind `/invoke`.
 2. **Vault→Sidekick cred resolution** for AWS (read-only handle, never printed).
 3. Real node logic for `inspect_repo` / `recommend_architecture` / `estimate_cost` (today stubs).
 4. **ECR image-scan operator** (edge-sentinel wired to ECR/Inspector) + the **harden→rebuild→push→`kubectl rollout restart`→re-scan** loop.
@@ -66,10 +66,10 @@ The "wow": one sentence → a real AWS deployment that **secures, hardens, monit
 8. **Sidekick-on-Strands** node + **AgentCore** hosting + one **CrewAI** operator (framework-neutrality) — needs the new Bedrock/AgentCore account.
 9. **Prompt-driven optional-app expansion** (Sidekick resolves named apps + deps into the mission plan).
 
-## 4. Repo layout (`redevops-aws-demo`)
+## 4. Repo layout (`redevops-demo`)
 
 ```
-redevops-aws-demo/
+redevops-demo/
   PLAN.md · README.md · compose.yml         ← Projects + Mission Runtime + infra operator + Context Runtime
   infra/
     terraform/envs/eks/                      ← self: VPC+EKS+ECR+EFS+Secrets, budget-tagged+TTL
