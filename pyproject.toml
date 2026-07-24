@@ -25,6 +25,8 @@ dev = [
     "boto3>=1.34",
     "moto[sts,ce,cloudwatch,ec2]>=5.0",
     "pytest>=8.0",
+    "fastapi>=0.110",   # operators are FastAPI services; test_http_wiring / test_service exercise them
+    "httpx>=0.27",      # starlette/fastapi TestClient transport
     "hvac>=2.0",
 ]
 
