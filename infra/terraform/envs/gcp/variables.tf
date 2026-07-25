@@ -96,3 +96,9 @@ variable "artifact_repos" {
   type    = list(string)
   default = ["outreach-engine", "edge-sentinel", "agentic-compliance", "agentic-privacy", "induced-fault-app"]
 }
+
+variable "node_service_account" {
+  description = "SA email for GKE nodes. Empty = the Compute Engine default SA (absent in some locked-down orgs); set to a real SA to override."
+  type        = string
+  default     = ""
+}

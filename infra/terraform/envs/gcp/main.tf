@@ -51,6 +51,16 @@ resource "google_container_cluster" "gke" {
   remove_default_node_pool = true
   initial_node_count       = 1
 
+  # The throwaway default pool still needs a valid node identity during cluster creation. Orgs that
+  # lack the Compute Engine default SA fail otherwise, so point it at our node SA when one is set.
+  dynamic "node_config" {
+    for_each = var.node_service_account != "" ? [1] : []
+    content {
+      service_account = var.node_service_account
+      oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
+    }
+  }
+
   # Demo hygiene: let `terraform destroy` actually delete the cluster.
   deletion_protection = false
 
@@ -89,6 +99,11 @@ resource "google_container_node_pool" "demo" {
     machine_type = var.node_machine_type
     disk_size_gb = var.node_disk_size
     disk_type    = "pd-standard" # cheapest; nothing in the demo needs SSD throughput
+
+    # Node identity. GCP's default is the Compute Engine default SA
+    # (<project-number>-compute@developer.gserviceaccount.com), but orgs that lock down service
+    # accounts may not have it. Set node_service_account to a real SA to override; empty = default.
+    service_account = var.node_service_account != "" ? var.node_service_account : null
 
     # Spot VMs — the GCP analog of AWS SPOT capacity_type. Cheaper, fine for a demo.
     spot = var.use_spot
