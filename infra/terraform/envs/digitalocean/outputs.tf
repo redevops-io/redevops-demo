@@ -19,10 +19,13 @@ output "kubeconfig_command" {
 
 # registry.digitalocean.com/<registry-name> — the single account-global DOCR endpoint.
 output "docr_registry" {
-  value = digitalocean_container_registry.demo.endpoint
+  value = one(digitalocean_container_registry.demo[*].endpoint)
 }
 
 # app-name -> full image repo path inside the single DOCR (DO analog of ecr_repo_urls).
+# Empty when the registry is skipped (create_registry=false).
 output "app_image_repos" {
-  value = { for a in var.app_repos : a => "${digitalocean_container_registry.demo.endpoint}/${a}" }
+  value = one(digitalocean_container_registry.demo[*].endpoint) == null ? {} : {
+    for a in var.app_repos : a => "${one(digitalocean_container_registry.demo[*].endpoint)}/${a}"
+  }
 }
