@@ -1,16 +1,32 @@
 [project]
-name = "redevops-aws-demo"
+name = "redevops-demo"
 version = "0.0.0"
-description = "ReDevOps × AWS real-time deploy-and-operate demo — Phase 0 scaffold"
+description = "ReDevOps multi-cloud real-time deploy-and-operate demo — AWS · Azure · GCP · DigitalOcean"
 requires-python = ">=3.10"
-dependencies = [
-    "boto3>=1.34",
-]
+# Base install is cloud-agnostic (demo_common). Each cloud's SDK is an optional extra so you only
+# pull what you deploy to; the per-cloud bindings import their SDKs lazily.
+dependencies = []
 
 [project.optional-dependencies]
+aws = ["boto3>=1.34"]
+azure = [
+    "azure-identity>=1.15",
+    "azure-mgmt-resource>=23",
+    "azure-mgmt-containerservice>=30",
+    "azure-mgmt-costmanagement>=4",
+]
+gcp = [
+    "google-auth>=2.28",
+    "google-cloud-container>=2.40",
+    "google-cloud-artifact-registry>=1.11",
+]
+digitalocean = ["python-digitalocean>=1.17"]
 dev = [
+    "boto3>=1.34",
     "moto[sts,ce,cloudwatch,ec2]>=5.0",
     "pytest>=8.0",
+    "fastapi>=0.110",   # operators are FastAPI services; test_http_wiring / test_service exercise them
+    "httpx>=0.27",      # starlette/fastapi TestClient transport
     "hvac>=2.0",
 ]
 
@@ -24,4 +40,4 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["aws_demo"]
+packages = ["demo_common", "aws_demo", "azure_demo", "gcp_demo", "do_demo"]

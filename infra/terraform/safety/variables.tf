@@ -29,7 +29,7 @@ variable "budget_notify_emails" {
 variable "repo_url" {
   description = "Git URL of this repo; CodeBuild clones it to run the out-of-band terraform destroy."
   type        = string
-  default     = "https://github.com/redevops-io/redevops-aws-demo.git"
+  default     = "https://github.com/redevops-io/redevops-demo.git"
 }
 
 variable "eks_env_path" {

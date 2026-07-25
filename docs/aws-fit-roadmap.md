@@ -3,7 +3,7 @@
 **Companion to the blog post** [*The Context Runtime Meets the AWS Agent Stack*](https://redevops.io/blog/context-runtime-meets-the-aws-agent-stack).
 
 This started as "what do we build for AWS." The file-level audit that follows — of `contextos`
-(Context Runtime), `agentic-os` (Mission Runtime + Sidekick) and `redevops-aws-demo` (the AWS glue) —
+(Context Runtime), `agentic-os` (Mission Runtime + Sidekick) and `redevops-demo` (the AWS glue) —
 turned up a more important conclusion than the AWS roadmap itself.
 
 > **Implementation status — 3 PRs, ~87 new tests, no boto3 required.** Built as a provider-neutral
@@ -127,7 +127,7 @@ Status legend below mirrors the article: **●** real · **◐** partial · **�
 | Permissions plane (row/column RBAC) | ◐ | **●** real, but it's data-access RBAC, **not** identity federation |
 | OAuth broker / token vault | ◐ "no OAuth broker" | **∅** confirmed absent (only static app tokens + Vault→STS role assumption) |
 | Content guardrails | ◐ "no content filter" | **∅** only a shell-danger regex scan; no PII/injection/toxicity on model I/O |
-| **AWS retrieval/model code** (Bedrock KB, OpenSearch, Bedrock provider, AgentCore) | implied by "optimization layer over AWS" | **∅** none in `contextos`; `redevops-aws-demo` has real STS/ECR/boto3 but **no `context_runtime` import anywhere** — the integration is planned, not wired |
+| **AWS retrieval/model code** (Bedrock KB, OpenSearch, Bedrock provider, AgentCore) | implied by "optimization layer over AWS" | **∅** none in `contextos`; `redevops-demo` has real STS/ECR/boto3 but **no `context_runtime` import anywhere** — the integration is planned, not wired |
 | Context-serving HTTP surface | — | **●** real FastAPI (`/librechat/retrieve`, `/explain`, OpenAI-compat `/v1/chat/completions`) — **but unauthenticated and no AWS arm behind it** |
 
 ---
@@ -210,7 +210,7 @@ article's ● claim to ◆ until it ships. Recommend building; it's small.
 
 ## Part 2 — Build the AWS-fit surface
 
-Zero of this exists today (`context_arms/` is empty; `redevops-aws-demo` never imports
+Zero of this exists today (`context_arms/` is empty; `redevops-demo` never imports
 `context_runtime`). Per headline conclusion #3, that's provider-neutrality, not neglect — AWS is one
 more provider behind the seams. Each item below is an adapter, not a kernel change.
 

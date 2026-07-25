@@ -15,13 +15,13 @@
 # (env or a mounted profile) — Sidekick resolves them from Vault via STS assume-role in the real flow.
 #
 # AGENTIC_OS_ROOT defaults to the sibling checkout (github.com/redevops-io/agentic-os next to this repo).
-name: redevops-aws-demo
+name: redevops-demo
 
 x-operator: &operator
   build:
-    context: ..                                   # redevops-aws-demo repo root
+    context: ..                                   # redevops-demo repo root
     dockerfile: operators/Dockerfile
-  image: redevops-aws-demo-operator:latest
+  image: redevops-demo-operator:latest
   environment: &operator-env
     SIM: ${SIM:-0}                                # 0 = real terraform/aws/kubectl; 1 = $0 simulators
     AGENTIC_OS_ROOT: /opt/agentic-os

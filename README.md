@@ -1,8 +1,22 @@
-# redevops-aws-demo
+# redevops-demo
 
-A **self-demonstrating** ReDevOps × AWS demo: this repo *contains* the Terraform + Ansible
-it deploys, so one prompt in **Projects** deploys it onto AWS and then **secures, hardens,
+A **self-demonstrating**, **multi-cloud** ReDevOps demo: this repo *contains* the Terraform + Ansible
+it deploys, so one prompt in **Projects** deploys it onto a hyperscaler and then **secures, hardens,
 monitors, and heals** it — every consequential step gated, inspectable, and replayable.
+
+The same governed deploy-and-operate spine targets four clouds through one cloud-agnostic
+`deployment-preflight` contract; only each cloud's managed-Kubernetes + registry Terraform and its
+credential model differ.
+
+| Cloud | Managed k8s + registry | Env | Binding | Status |
+|---|---|---|---|---|
+| **AWS** | EKS + ECR | `infra/terraform/envs/aws` | `aws_demo/` | **deployed + validated** (`terraform plan` = 68 res, $0) |
+| **Azure** | AKS + ACR | `infra/terraform/envs/azure` | `azure_demo/` | IaC + binding, **sim-validated** ($0) |
+| **GCP** | GKE + Artifact Registry | `infra/terraform/envs/gcp` | `gcp_demo/` | IaC + binding, **sim-validated** ($0) |
+| **DigitalOcean** | DOKS + DOCR | `infra/terraform/envs/digitalocean` | `do_demo/` | IaC + binding, **sim-validated** ($0) |
+
+The shared core lives in `demo_common/` (preflight contract + budget policy); run any cloud's checklist
+with `python -m demo_common.doctor <aws|azure|gcp|digitalocean>`.
 
 See [`PLAN.md`](PLAN.md) for the full architecture, phases, and decisions.
 
@@ -13,10 +27,10 @@ Projects (human control plane)
 Mission Runtime ── governs plan · gate · verify · saga · replay
    │
    ├── Context Runtime ── decides retrieval arm + model per step
-   └── Sidekick ──────── DevOps agent: Vault→STS, terraform/ansible/kubectl, monitor loop
+   └── Sidekick ──────── DevOps agent: Vault→cloud creds, terraform/ansible/kubectl, monitor loop
                           │
-                          ▼  (real EKS in a dedicated us-east-1 account)
-                  EKS + Helm monitoring + edge-sentinel + Agentic Compliance/Privacy
+                          ▼  (real managed k8s: EKS · AKS · GKE · DOKS)
+                  managed k8s + Helm monitoring + edge-sentinel + Agentic Compliance/Privacy
 ```
 
 ## Status
@@ -35,9 +49,13 @@ Mission Runtime ── governs plan · gate · verify · saga · replay
 
 **Onboarding — Sidekick tells you what's required** ✅
 - Preflight is a **cloud-agnostic Sidekick skill** (`deployment-preflight`) that gates every deploy
-  mission (node 0), shared across AWS/GCP/Azure/DigitalOcean — only the CLI + Terraform syntax differ.
-  `aws_demo/preflight.py` is its executable AWS binding (exposable as an MCP `preflight_check` tool);
-  run it by hand with `./scripts/doctor.sh` for a ✓/✗ checklist + the **exact fix** per item.
+  mission (node 0), shared across AWS/Azure/GCP/DigitalOcean — only the CLI + Terraform syntax differ.
+  The shared `{ready, checks[], blockers[]}` contract lives in `demo_common/preflight.py`; each cloud's
+  executable binding is `{aws,azure,gcp,do}_demo/preflight.py` (exposable as an MCP `preflight_check(cloud)`
+  tool). Run any cloud's checklist for a ✓/✗ list + the **exact fix** per item:
+  ```bash
+  python -m demo_common.doctor aws          # or azure | gcp | digitalocean
+  ```
 - It detects creds, region, per-role permissions, and the **Bedrock account-invoke restriction** (with
   the support-case fix). Hard blockers are only Docker + creds + deployer perms; cost/Bedrock are warnings.
 - **Only Docker is required locally** — terraform/aws/ansible/helm/kubectl all run in the operator
@@ -103,11 +121,23 @@ sibling `agentic-os` checkout.
 | agentic-privacy | 8244 | PII/data-map scan (active only where a data source exists) |
 | sidekick | 8000 | Projects cockpit + Mission Runtime governing the above |
 
-## Cloud prerequisites (owner-provisioned — see `infra/terraform/safety/README.md`)
-1. Dedicated **us-east-1** account with **Bedrock model access + AgentCore** enabled.
-2. `terraform apply` the **safety** module → three roles + Budgets kill-switch.
-3. Write Vault: `secret/redevops/aws-demo/{bootstrap,config}`.
+## Cloud prerequisites (owner-provisioned)
 
-Safety is layered: **in-runtime** budget guard + approval gates on every consequential step,
-and an **out-of-band** Budgets alarm + auto-destroy that works even if the runtime is down.
-No AWS keys live in this repo or in `compose.yml` — Sidekick assumes short-lived roles from Vault.
+Each cloud follows the same shape — a scoped credential in Vault + the demo env under
+`infra/terraform/envs/<cloud>`. Pick the cloud you're deploying:
+
+| Cloud | Credential model | Vault path | env |
+|---|---|---|---|
+| AWS | bootstrap key → **STS assume-role** (deployer/agent/readonly) | `secret/redevops/aws-demo/{bootstrap,config}` | `envs/aws` |
+| Azure | **service principal** (tenant/client/secret + subscription) | `secret/redevops/azure-demo/{bootstrap,config}` | `envs/azure` |
+| GCP | **service-account key** (+ project) | `secret/redevops/gcp-demo/{bootstrap,config}` | `envs/gcp` |
+| DigitalOcean | account **API token** (no role-assumption; scope by token) | `secret/redevops/do-demo/{bootstrap,config}` | `envs/digitalocean` |
+
+For AWS specifically: a dedicated **us-east-1** account with **Bedrock model access + AgentCore**, and
+`terraform apply` the **safety** module (`infra/terraform/safety/`) → three roles + Budgets kill-switch.
+**AWS is the deployed/validated cloud today; Azure/GCP/DigitalOcean ship as sim-validated IaC + bindings**
+(`terraform validate` clean) and haven't been applied to real infra yet.
+
+Safety is layered: **in-runtime** budget guard + approval gates on every consequential step, and an
+**out-of-band** budget alarm + auto-destroy that works even if the runtime is down. No cloud keys live in
+this repo or in `compose.yml` — Sidekick pulls short-lived, scoped credentials from Vault per cloud.
