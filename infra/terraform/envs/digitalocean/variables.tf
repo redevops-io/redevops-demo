@@ -72,10 +72,18 @@ variable "registry_name" {
   default = "redevops-demo"
 }
 
-# starter = 1 repo / 500MB (too small for the 5 demo apps); basic = unlimited repos / 5GB.
+# Create the account-global DOCR at all? Some accounts reject a paid-tier create, so it's optional —
+# skipping it still provisions the VPC + cluster (the registry is only the image-push target).
+variable "create_registry" {
+  type    = bool
+  default = true
+}
+
+# starter = 1 repo / 500MB (free); basic = 5 repos / 5GB ($5/mo). Default to the free starter tier so
+# the create succeeds on accounts without a paid registry plan; raise to basic where more repos help.
 variable "registry_subscription_tier" {
   type    = string
-  default = "basic"
+  default = "starter"
 }
 
 # Image repo names created (on push) inside the single DOCR — the DO analog of the AWS ecr_repos list.
