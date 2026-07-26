@@ -20,8 +20,9 @@ variable "ttl" {
 }
 
 variable "kubernetes_version" {
-  type    = string
-  default = "1.33"
+  type = string
+  # 1.35: AWS is retiring 1.33, so pin ahead to keep runway before 1.34 also expires.
+  default = "1.35"
 }
 
 variable "vpc_cidr" {
