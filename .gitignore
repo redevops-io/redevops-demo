@@ -26,3 +26,7 @@ crash.log
 *.pem
 *.token
 join-command.sh
+
+# secret-prone paths (hardening pass)
+_gl.json
+_raw.json
