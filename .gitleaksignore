@@ -1,0 +1,5 @@
+# Known findings acknowledged by the hardening pass. Confirmed false positives are handled in
+# .gitleaks.toml; the entries below are historical occurrences of real secrets that remain in
+# git history. They are inventoried here (CI stays green) and are PENDING rotation + history
+# purge — they are NOT a statement that the secret is safe. Rotate the credential, then purge.
+
