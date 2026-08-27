@@ -17,3 +17,16 @@ crash.log
 .env
 *secret*
 !infra/terraform/safety/*.tf
+
+# secret-prone paths (hardening pass)
+.env.*
+!.env.example
+!*.env.template
+*.key
+*.pem
+*.token
+join-command.sh
+
+# secret-prone paths (hardening pass)
+_gl.json
+_raw.json
