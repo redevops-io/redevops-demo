@@ -1,5 +1,7 @@
 # redevops-demo
 
+[![NVIDIA Inception](https://img.shields.io/badge/NVIDIA-Inception%20Program%20Member-76B900.svg)](https://www.nvidia.com/en-us/startups/)
+
 A **self-demonstrating**, **multi-cloud** ReDevOps demo: this repo *contains* the Terraform + Ansible
 it deploys, so one prompt in **Projects** deploys it onto a hyperscaler and then **secures, hardens,
 monitors, and heals** it — every consequential step gated, inspectable, and replayable.
