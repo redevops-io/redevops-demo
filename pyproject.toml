@@ -5,7 +5,10 @@ description = "ReDevOps multi-cloud real-time deploy-and-operate demo — AWS ·
 requires-python = ">=3.10"
 # Base install is cloud-agnostic (demo_common). Each cloud's SDK is an optional extra so you only
 # pull what you deploy to; the per-cloud bindings import their SDKs lazily.
-dependencies = []
+# The agentic-os kernel (agentic_os package), pinned to a released tag. AGENTIC_OS_ROOT can still point at a
+# source checkout to override it. NB: the kernel's apps/ tree (e.g. the `infra` operator) is NOT in the wheel;
+# it is only importable from a source checkout (set AGENTIC_OS_ROOT, or place one next to this repo).
+dependencies = ["agentic-os @ git+https://github.com/redevops-io/agentic-os.git@v0.3.25"]
 
 [project.optional-dependencies]
 aws = ["boto3>=1.34"]
