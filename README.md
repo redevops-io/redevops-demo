@@ -143,3 +143,7 @@ For AWS specifically: a dedicated **us-east-1** account with **Bedrock model acc
 Safety is layered: **in-runtime** budget guard + approval gates on every consequential step, and an
 **out-of-band** budget alarm + auto-destroy that works even if the runtime is down. No cloud keys live in
 this repo or in `compose.yml` — Sidekick pulls short-lived, scoped credentials from Vault per cloud.
+
+## License
+
+AGPL-3.0-only. See [LICENSE](LICENSE).
