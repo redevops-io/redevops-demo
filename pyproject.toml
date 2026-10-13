@@ -3,6 +3,7 @@ name = "redevops-demo"
 version = "0.0.0"
 description = "ReDevOps multi-cloud real-time deploy-and-operate demo — AWS · Azure · GCP · DigitalOcean"
 requires-python = ">=3.10"
+license = { text = "AGPL-3.0-only" }
 # Base install is cloud-agnostic (demo_common). Each cloud's SDK is an optional extra so you only
 # pull what you deploy to; the per-cloud bindings import their SDKs lazily.
 dependencies = []
