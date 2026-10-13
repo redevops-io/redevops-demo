@@ -1,0 +1,32 @@
+name: tests
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AGENTIC_OS_ROOT: ${{ github.workspace }}/_agentic-os
+    steps:
+      - uses: actions/checkout@v4
+      # The kernel's apps/ tree (infra operator) is not in the agentic-os wheel; check out the same pinned tag.
+      - uses: actions/checkout@v4
+        with:
+          repository: redevops-io/agentic-os
+          ref: v0.3.25
+          path: _agentic-os
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: pytest -q

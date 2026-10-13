@@ -111,8 +111,9 @@ docker compose -f deploy/compose.demo.yml up --build
 ```
 Then open the Projects cockpit at http://localhost:8000/cockpit and start the deploy mission — it
 plans + scans, pauses at the provision approval gate with the terraform plan + cost estimate, then
-provisions → configures → verifies across the federated operators. `AGENTIC_OS_ROOT` defaults to a
-sibling `agentic-os` checkout.
+provisions → configures → verifies across the federated operators. The `agentic_os` kernel is a pinned pip dependency
+(`pip install -e .`); `AGENTIC_OS_ROOT` still overrides it with a source checkout, which is also needed for the
+kernel's `apps/` operators (e.g. `infra`), as they are not shipped in the wheel. Defaults to a sibling `agentic-os` checkout.
 
 | service | port | operator |
 |---|---|---|
