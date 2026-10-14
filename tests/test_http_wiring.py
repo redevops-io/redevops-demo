@@ -31,7 +31,7 @@ def test_operator_service_exposes_capabilities_and_invoke():
     assert r["result"]["needs_hardening"] is True
 
 
-def test_deploy_mission_drives_operators_over_http():
+def _http_deploy():
     # infra + edge-sentinel behind /invoke, in sim
     infra_c = _mount(build_infra_operator(run=dop._sim_runner, http_get=lambda u: 200))
     env = SimEcrEnv()
@@ -54,4 +54,18 @@ def test_deploy_mission_drives_operators_over_http():
     dop.approve_all_gates(rt, m.id)  # provision (with plan_digest) then configure: two mandatory gates
     if m.state not in (MissionState.SUCCEEDED, MissionState.FAILED):
         rt.run(m.id)
-    assert m.state == MissionState.SUCCEEDED
+    return m
+
+
+def test_deploy_mission_drives_operators_over_http():
+    # hermetic: conftest installs a throwaway AGENTIC_OS_APPROVAL_SECRET shared by the runtime and the operators
+    assert _http_deploy().state == MissionState.SUCCEEDED
+
+
+def test_http_approved_actions_require_the_approval_secret(monkeypatch, tmp_path):
+    """Documents the requirement: with no secret in the env AND an empty HOME (no kernel secrets file), the
+    signed approval cannot be minted, so operators stage the action instead of executing it (fail closed)."""
+    monkeypatch.delenv("AGENTIC_OS_APPROVAL_SECRET", raising=False)
+    from agentic_os.mission.approval import _secret_bytes
+    assert _secret_bytes() == b""
+    assert _http_deploy().state != MissionState.SUCCEEDED

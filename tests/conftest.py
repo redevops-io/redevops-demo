@@ -2,6 +2,8 @@ import os
 import pathlib
 import sys
 
+import secrets
+
 import pytest
 
 # The real infra operator lives in the (separate) agentic-os repo — apps/infra, package `infra`.
@@ -40,3 +42,15 @@ def sim_plan_root(tmp_path, monkeypatch):
     (root / "terraform" / "envs" / "aws").mkdir(parents=True)
     monkeypatch.setattr(core, "TF_ROOT", str(root / "terraform"))
     yield
+
+
+@pytest.fixture(autouse=True)
+def hermetic_kernel_secrets(tmp_path, monkeypatch):
+    """Tests must not depend on a developer's local secrets. The kernel resolves AGENTIC_OS_APPROVAL_SECRET from
+    the env, else from ~/.config/redevops/secrets.env: give every test an EMPTY home and a throwaway random secret
+    shared by the runtime and all in-process/HTTP operators (never printed)."""
+    home = tmp_path / "kernel-home"
+    home.mkdir()
+    for k in ("HOME", "XDG_CONFIG_HOME", "APPDATA", "USERPROFILE"):
+        monkeypatch.setenv(k, str(home))
+    monkeypatch.setenv("AGENTIC_OS_APPROVAL_SECRET", secrets.token_hex(32))
