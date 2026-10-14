@@ -89,7 +89,27 @@ def estimate_cost_from_plan(plan_text: str) -> dict:
     }
 
 
+_SIM_ROOT: "str | None" = None
+
+
+def _use_sim_deploy_root() -> None:
+    """The simulated runner writes the saved plan file under the infra operator's terraform root. Unless the
+    operator explicitly set INFRA_DEPLOY_ROOT, point it at a throwaway dir so a sim run never writes into a real tree."""
+    global _SIM_ROOT
+    if os.environ.get("INFRA_DEPLOY_ROOT"):
+        return
+    import tempfile
+
+    import infra.core as core
+    if _SIM_ROOT is None:
+        _SIM_ROOT = os.path.join(tempfile.mkdtemp(prefix="redevops-demo-sim-"), "terraform")
+        os.makedirs(os.path.join(_SIM_ROOT, "envs", CLOUD))
+    core.TF_ROOT = _SIM_ROOT
+
+
 def build_runtime(sim: bool = True) -> MissionRuntime:
+    if sim:
+        _use_sim_deploy_root()
     run = _sim_runner if sim else None
     http_get = (lambda url: 200) if sim else None
     infra = build_infra_operator(run=run, http_get=http_get)

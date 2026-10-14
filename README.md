@@ -69,7 +69,7 @@ Mission Runtime ── governs plan · gate · verify · saga · replay
   `sentinel.rescan` (confirm cleared)
 - **Governed harden loop** (`missions/harden_images.py`): scan finds a seeded CVE → **⛔ "harden?" gate**
   → approve → rebuild+push → rollout → re-scan **cleared** (reject hardens nothing). **26 tests green.**
-- Run it: `APPROVE=1 python -m missions.harden_images`
+- Run it: `python -m missions.harden_images` (parks at the gate; add `--auto-approve` only in isolated demo mode, see below)
 
 **Phase 3 — operate loop + security posture (sim-first, $0)** ✅
 - **Induced-fault operate loop** (`missions/incident_response.py`, the "wow"): rising restarts →
@@ -78,7 +78,7 @@ Mission Runtime ── governs plan · gate · verify · saga · replay
 - **Agentic Compliance + Privacy** (`missions/posture.py`): CIS scan of a seeded vulnerable workload;
   PII scan of a synthetic dataset (**inactive with no data source — never fakes findings**). The
   kernel marks the whole compliance/privacy domain **regulatory → even the scan is gated**.
-- Run: `APPROVE=1 python -m missions.incident_response`. **34 tests green.**
+- Run: `python -m missions.incident_response` (parks at the gate; `--auto-approve` only in isolated demo mode, see below). **34 tests green.**
 
 **Next:** Phase 4 (Bedrock/AgentCore/Strands + outreach capstone), then the real `apply` for a recorded run.
 
@@ -131,10 +131,14 @@ Every consequential gate in these missions normally waits for a human. For unatt
 disposable demo environment**. It is off by default and fails closed: any doubt leaves the mission parked
 for a human and logs why.
 
+> **This is a safety interlock against accidents, NOT a security boundary.** Someone who controls the process
+> environment, the policy file or the Python process can defeat it. The real protection is that the demo
+> tenant/credentials are disposable, the missions run against simulators, and the kernel's own gates still run.
+
 ```bash
 export REDEVOPS_DEMO_MODE=isolated
-export REDEVOPS_DEMO_TENANT=demo-sandbox-tenant          # must equal the policy's designated tenant
-export REDEVOPS_DEMO_ENVIRONMENT=demo-isolated-sim       # must equal the policy's designated environment
+export REDEVOPS_DEMO_TENANT=demo-sandbox                 # must equal the policy's designated tenant
+export REDEVOPS_DEMO_ENVIRONMENT=isolated-demo           # must equal the policy's designated environment
 export REDEVOPS_DEMO_ALLOWLIST=deploy/demo-allowlist.json
 SIM=1 python -m missions.deploy_operate --auto-approve   # banner: ISOLATED DEMO: auto-approving allowlisted simulated actions
 ```
@@ -143,13 +147,19 @@ The same flag exists on `missions.incident_response` and `missions.harden_images
 
 **How isolation is enforced** (all must hold, checked on every request, never cached):
 - `REDEVOPS_DEMO_MODE` is exactly `isolated`; unset or anything else = disabled.
-- the tenant and environment markers equal the policy's designated demo values, **and** the mission itself
-  was created in that tenant. Designated values must look like `demo-...` and may not contain
-  prod/live/real/customer. Changing the tenant, the environment, or the action digest makes approval fail.
-- the allowlist policy is present, valid and unexpired (`expires_at`); it lists **exact** capability names.
+- the tenant and environment markers equal the policy's designated values, **and** the mission itself
+  was created in that tenant. The designated values are fixed constants in code (`demo-sandbox`,
+  `isolated-demo`); a policy may use another target only with `"custom_target": true` and a strict
+  `demo-sandbox-<id>` / `isolated-demo-<id>` form. Changing the tenant, the environment, or the action digest
+  makes approval fail.
+- the allowlist policy is present, valid, unexpired and not more than 400 days out (`expires_at` must be a finite
+  timestamp); it lists **exact** capability names. If `REDEVOPS_DEMO_POLICY_KEY` is set, the policy file must
+  carry a matching hex HMAC-SHA256 in `<policy>.sig`, otherwise it is refused.
 - the runtime is the `$0` simulator (`rt.demo_simulated is True`, i.e. `SIM=1`) and no cloud/Vault/kube
-  credentials are in the environment (`AWS_*`, `AZURE/ARM_CLIENT_SECRET`, `GOOGLE_APPLICATION_CREDENTIALS`,
-  `DIGITALOCEAN_TOKEN`, `VAULT_TOKEN`, `KUBECONFIG`).
+  credentials are present: ~25 env names (`AWS_*` incl. web-identity/container/profile/role, `AZURE_*`/`ARM_*`,
+  `GOOGLE_APPLICATION_CREDENTIALS`, `DIGITALOCEAN_*`, `VAULT_ADDR/TOKEN`, `DOCKER_HOST`, `SSH_AUTH_SOCK`,
+  `KUBECONFIG`, `KUBERNETES_SERVICE_HOST`) and `~/.aws/credentials`, `~/.kube/config`, `~/.vault-token`.
+  (Deliberately strict: run demos from a clean shell/container.)
 - the request is bound to one action by `digest = sha256(canonical JSON of mission id, node id, capability,
   tenant, environment, inputs)` (the saved-plan digest is part of the inputs). It must address this mission,
   match the live gate, be unexpired (5 min TTL, never past the policy expiry) and be **one-time use**: a
@@ -160,8 +170,9 @@ The same flag exists on `missions.incident_response` and `missions.harden_images
   cannot forge or bypass any of it.
 
 **Audit.** Each decision (approved or refused) writes a receipt `{actor: demo_driver, policy_version, digest,
-decision, ts, mission/node/capability/tenant/environment, reason}` as a `DemoAutoApproval` event in the
-mission's event log (before the kernel's `ApprovalGranted`) and as a JSON line in
+decision, ts, mission/node/capability/tenant/environment, reason}`. Two phases: a `DemoAutoApprovalIntent` event
+before the kernel's `ApprovalGranted` and a `DemoAutoApprovalResult` (granted | failed + reason) after; refusals
+are `DemoAutoApproval` events. All also go as JSON lines to
 `$REDEVOPS_DEMO_RECEIPTS` (default `.redevops-demo/receipts.jsonl`). If the receipt cannot be written, nothing is approved.
 
 **Allow-listed today** (`deploy/demo-allowlist.json`, all against the simulators): `infra.provision`,

@@ -1,7 +1,7 @@
 {
   "version": "2026-10-14.1",
-  "tenant": "demo-sandbox-tenant",
-  "environment": "demo-isolated-sim",
+  "tenant": "demo-sandbox",
+  "environment": "isolated-demo",
   "expires_at": "2027-06-30T00:00:00Z",
   "allow": [
     {"capability": "infra.provision", "params": {"infra_planned": null}},
