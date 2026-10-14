@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: redevops-io/agentic-os
-          ref: v0.3.25
+          ref: v0.3.30
           path: _agentic-os
       - uses: actions/setup-python@v5
         with:

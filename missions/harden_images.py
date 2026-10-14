@@ -24,6 +24,7 @@ from agentic_os.mission.runtime import MissionRuntime  # noqa: E402
 from agentic_os.mission.store import EventStore  # noqa: E402
 from agentic_os.mission.types import ExecutionIntent, IntentStep  # noqa: E402
 
+from demo_common.demo_approval import add_auto_approve_arg, demo_tenant, run_auto_approve  # noqa: E402
 from operators.edge_sentinel.operator import build_edge_sentinel_operator  # noqa: E402
 from operators.edge_sentinel import core  # noqa: E402
 
@@ -77,28 +78,32 @@ def build_runtime(env: "SimEcrEnv | None" = None, sim: bool = True) -> MissionRu
     reg = CapabilityRegistry()
     reg.register(sentinel.manifest)
     client = LocalOperatorClient({"edge-sentinel": sentinel})
-    return MissionRuntime(reg, Executor(client), store=EventStore())
+    rt = MissionRuntime(reg, Executor(client), store=EventStore())
+    rt.demo_simulated = isinstance(env, SimEcrEnv)   # the auto-approve driver refuses non-simulated runtimes
+    return rt
 
 
-def create_harden_mission(rt: MissionRuntime, goal: str = "Scan and harden the deployment's ECR images"):
+def create_harden_mission(rt: MissionRuntime, goal: str = "Scan and harden the deployment's ECR images", tenant: str = ""):
     grants = ["ecr:read", "ecr:write", "k8s:write"]
-    m = rt.create_mission(goal, policy_refs=grants, template="harden_images")
+    m = rt.create_mission(goal, policy_refs=grants, template="harden_images", tenant=tenant)
     rt.run(m.id)
     return m
 
 
-def main() -> None:  # pragma: no cover — demo driver
+def main(argv=None) -> None:  # pragma: no cover — demo driver
+    import argparse
+    ap = argparse.ArgumentParser()
+    add_auto_approve_arg(ap)
+    auto = ap.parse_args(argv).auto_approve or os.environ.get("APPROVE") == "1"   # legacy APPROVE=1 == --auto-approve
     env = SimEcrEnv()
     rt = build_runtime(env)
-    m = create_harden_mission(rt)
+    m = create_harden_mission(rt, tenant=demo_tenant(auto))
     print(f"harden mission {m.id}  state={m.state.value}")
     pending = rt.repo.pending_human(m.id)
     if pending:
         print(f"🛡  edge-sentinel found CVEs → ⛔ HARDEN GATE at {pending.get('node_id')}: {pending.get('prompt','harden?')}")
-        if os.environ.get("APPROVE") == "1":
-            rt.approve(m.id, pending["node_id"], "approve")
-            if m.state.value not in ("succeeded", "failed"):
-                rt.run(m.id)
+        if auto:
+            run_auto_approve(rt, m.id)
             cleared = core.rescan("outreach-engine", ecr=env)["cleared"]
             print(f"→ approved · rebuilt+pushed · rolled out · re-scan cleared={cleared}  final={m.state.value}")
 

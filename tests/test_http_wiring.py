@@ -51,7 +51,7 @@ def test_deploy_mission_drives_operators_over_http():
     # scan + plan ran over HTTP; paused at the provision gate
     assert m.state == MissionState.WAITING_HUMAN
     pend = rt.repo.pending_human(m.id)
-    rt.approve(m.id, pend["node_id"], "approve")
+    dop.approve_all_gates(rt, m.id)  # provision (with plan_digest) then configure: two mandatory gates
     if m.state not in (MissionState.SUCCEEDED, MissionState.FAILED):
         rt.run(m.id)
     assert m.state == MissionState.SUCCEEDED

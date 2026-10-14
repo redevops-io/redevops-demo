@@ -20,7 +20,7 @@ def test_pauses_at_provision_gate_then_completes_on_approve():
     assert est["est_monthly_usd"] > 0 and est["est_hourly_usd"] > 0
 
     # human approves → the mission provisions/configures/verifies to completion
-    rt.approve(m.id, pending["node_id"], "approve")
+    dop.approve_all_gates(rt, m.id)  # provision (with plan_digest) then configure: two mandatory gates
     if m.state not in (MissionState.SUCCEEDED, MissionState.FAILED):
         rt.run(m.id)
     assert m.state == MissionState.SUCCEEDED

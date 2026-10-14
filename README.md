@@ -85,7 +85,7 @@ Mission Runtime ── governs plan · gate · verify · saga · replay
 ## Quickstart (local, no cloud)
 ```bash
 uv venv .venv && uv pip install --python .venv -e ".[dev]"
-.venv/bin/pytest                      # 14 tests, zero cloud calls
+.venv/bin/pytest                      # zero cloud calls
 ```
 
 ## Bring the cockpit up (mirrors the one-click guide)
@@ -123,6 +123,61 @@ kernel's `apps/` operators (e.g. `infra`), as they are not shipped in the wheel.
 | agentic-compliance | 8243 | CIS/OpenSCAP posture scan → gated remediation |
 | agentic-privacy | 8244 | PII/data-map scan (active only where a data source exists) |
 | sidekick | 8000 | Projects cockpit + Mission Runtime governing the above |
+
+## Isolated demo auto-approval (`--auto-approve`)
+
+Every consequential gate in these missions normally waits for a human. For unattended demos,
+`demo_common/demo_approval.py::DemoApprovalDriver` can press "approve" for you **only inside an isolated,
+disposable demo environment**. It is off by default and fails closed: any doubt leaves the mission parked
+for a human and logs why.
+
+```bash
+export REDEVOPS_DEMO_MODE=isolated
+export REDEVOPS_DEMO_TENANT=demo-sandbox-tenant          # must equal the policy's designated tenant
+export REDEVOPS_DEMO_ENVIRONMENT=demo-isolated-sim       # must equal the policy's designated environment
+export REDEVOPS_DEMO_ALLOWLIST=deploy/demo-allowlist.json
+SIM=1 python -m missions.deploy_operate --auto-approve   # banner: ISOLATED DEMO: auto-approving allowlisted simulated actions
+```
+(`APPROVE=1` is now just an alias of `--auto-approve`; it no longer approves unconditionally.)
+The same flag exists on `missions.incident_response` and `missions.harden_images`.
+
+**How isolation is enforced** (all must hold, checked on every request, never cached):
+- `REDEVOPS_DEMO_MODE` is exactly `isolated`; unset or anything else = disabled.
+- the tenant and environment markers equal the policy's designated demo values, **and** the mission itself
+  was created in that tenant. Designated values must look like `demo-...` and may not contain
+  prod/live/real/customer. Changing the tenant, the environment, or the action digest makes approval fail.
+- the allowlist policy is present, valid and unexpired (`expires_at`); it lists **exact** capability names.
+- the runtime is the `$0` simulator (`rt.demo_simulated is True`, i.e. `SIM=1`) and no cloud/Vault/kube
+  credentials are in the environment (`AWS_*`, `AZURE/ARM_CLIENT_SECRET`, `GOOGLE_APPLICATION_CREDENTIALS`,
+  `DIGITALOCEAN_TOKEN`, `VAULT_TOKEN`, `KUBECONFIG`).
+- the request is bound to one action by `digest = sha256(canonical JSON of mission id, node id, capability,
+  tenant, environment, inputs)` (the saved-plan digest is part of the inputs). It must address this mission,
+  match the live gate, be unexpired (5 min TTL, never past the policy expiry) and be **one-time use**: a
+  replayed digest is refused, also across restarts (receipt file) and drivers (the mission event log).
+- it approves through the same `MissionRuntime.approve` a human uses, with its own identity `demo_driver`.
+  The kernel's own gates are untouched: provision still needs the approved `plan_digest`, configure is still
+  its own gate, and the runtime still mints the signed approval token the operator verifies. The driver
+  cannot forge or bypass any of it.
+
+**Audit.** Each decision (approved or refused) writes a receipt `{actor: demo_driver, policy_version, digest,
+decision, ts, mission/node/capability/tenant/environment, reason}` as a `DemoAutoApproval` event in the
+mission's event log (before the kernel's `ApprovalGranted`) and as a JSON line in
+`$REDEVOPS_DEMO_RECEIPTS` (default `.redevops-demo/receipts.jsonl`). If the receipt cannot be written, nothing is approved.
+
+**Allow-listed today** (`deploy/demo-allowlist.json`, all against the simulators): `infra.provision`,
+`infra.configure`, `incident.remediate`, `sentinel.harden`.
+
+**Never auto-approved**: sending real messages (email/SMS/chat), payments, any change to a production system,
+any change to real customer records, any real cloud apply (`SIM=0`), and anything not on the allowlist.
+In those cases the mission parks and a human approves in the cockpit.
+
+**Extending the allowlist safely.** Add one object per action type to the JSON policy and bump `version`:
+`{"capability": "crm.update_simulated", "params": {"account_id": ["acct-fixture-1"]}, "max_cost_usd": 0}`.
+Rules: exact capability names only (`*`, `?`, `[]` are rejected at load); declare `params` (input key -> list of
+permitted values, or null for any) so literal inputs are not accepted by accident; only add an action whose
+operator is backed by a simulator/fixture in the demo tenant; keep `expires_at` short and re-sign by editing the
+file in review. Add a test next to `tests/test_demo_approval.py` showing a variation (other tenant, modified
+input) is refused.
 
 ## Cloud prerequisites (owner-provisioned)
 
