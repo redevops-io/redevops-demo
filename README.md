@@ -161,9 +161,15 @@ The same flag exists on `missions.incident_response` and `missions.harden_images
   `KUBECONFIG`, `KUBERNETES_SERVICE_HOST`) and `~/.aws/credentials`, `~/.kube/config`, `~/.vault-token`.
   (Deliberately strict: run demos from a clean shell/container.)
 - the request is bound to one action by `digest = sha256(canonical JSON of mission id, node id, capability,
-  tenant, environment, inputs)` (the saved-plan digest is part of the inputs). It must address this mission,
-  match the live gate, be unexpired (5 min TTL, never past the policy expiry) and be **one-time use**: a
-  replayed digest is refused, also across restarts (receipt file) and drivers (the mission event log).
+  tenant, environment, inputs)` (the saved-plan digest is part of the inputs). The request, including its
+  timestamps, is HMAC-authenticated with a per-process key, so an edited request is refused, and a request
+  cannot be approved after a restart (fails closed: recreate the request). It must address this mission,
+  match the live gate, be unexpired (5 min TTL, never past the policy expiry) and be **one-time use**. The
+  claim is atomic (file lock around check, intent, kernel approve, result), so two drivers or processes
+  sharing a receipts path cannot both approve; a replayed digest is refused across restarts too.
+  All processes must share ONE receipts path (it holds the lock and replay state); a second path for the same
+  policy file is refused. A gate whose kernel approve failed 3 times is refused (`too_many_failures`) until
+  `clear_failures` is called.
 - it approves through the same `MissionRuntime.approve` a human uses, with its own identity `demo_driver`.
   The kernel's own gates are untouched: provision still needs the approved `plan_digest`, configure is still
   its own gate, and the runtime still mints the signed approval token the operator verifies. The driver

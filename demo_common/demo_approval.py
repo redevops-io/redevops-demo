@@ -35,6 +35,7 @@ import os
 import pwd
 import re
 import secrets
+import tempfile
 import threading
 import time
 import uuid
@@ -120,6 +121,10 @@ def _parse_ts(value: Any) -> float:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.timestamp()
+
+
+def _binding_dir() -> str:
+    return os.path.join(tempfile.gettempdir(), f"redevops-demo-{os.geteuid()}")
 
 
 def _effective_home() -> str:
@@ -298,11 +303,14 @@ class DemoApprovalDriver:
     def __init__(self, rt, policy: DemoPolicy | None = None, *, env: dict | None = None,
                  receipts_path: str | None = None, clock: Callable[[], float] = _utcnow,
                  ttl_seconds: float = DEFAULT_TTL_SECONDS, approve_fn: Callable | None = None,
-                 home: str | None = None):
+                 home: str | None = None, max_failures: int = 3, backoff_seconds: float = 0.05,
+                 sleep: Callable[[float], None] = time.sleep):
         self.rt = rt
         self._env = os.environ if env is None else env
         self._clock = clock
         self._ttl = ttl_seconds
+        self._max_failures, self._backoff, self._sleep = max_failures, backoff_seconds, sleep
+        self._policy_path = ""
         self._home = home if home is not None else _effective_home()
         self._policy_error = ""
         self.policy = policy
@@ -311,6 +319,7 @@ class DemoApprovalDriver:
             if path:
                 try:
                     self.policy = DemoPolicy.load(path, self._env.get(ENV_POLICY_KEY) or None)
+                    self._policy_path = os.path.realpath(path)
                 except PolicyError as e:
                     self._policy_error = str(e)
             else:
@@ -338,11 +347,39 @@ class DemoApprovalDriver:
             return "target environment marker does not equal the designated demo environment"
         if getattr(self.rt, "demo_simulated", False) is not True:
             return "runtime is not a simulated demo runtime"
+        bound = self._receipts_binding_problem()
+        if bound:
+            return bound
         present = [k for k in _REAL_CREDENTIAL_ENV if env.get(k)]
         present += [f"~/{f}" for f in _REAL_CREDENTIAL_FILES if os.path.exists(os.path.join(self._home, f))]
         if present:
             return f"real credentials present in environment ({', '.join(present)}); refusing"
         return None
+
+    def _receipts_binding_problem(self) -> str | None:
+        """One policy file <-> one receipts path on this host. The claim lock is per receipts path, so two processes
+        using different receipts files for the same policy could both approve; refuse that configuration."""
+        if not self._policy_path:
+            return None
+        want = os.path.realpath(self.receipts_path)
+        try:
+            d = _binding_dir()
+            os.makedirs(d, mode=0o700, exist_ok=True)
+            f = os.path.join(d, hashlib.sha256(self._policy_path.encode()).hexdigest()[:32] + ".bind")
+            try:
+                fd = os.open(f, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, "w") as fh:
+                    fh.write(want)
+                return None
+            except FileExistsError:
+                with open(f) as fh:
+                    have = fh.read().strip()
+            if have != want:
+                return (f"another receipts path is already bound to this policy; all processes must share one "
+                        f"(remove {f} to rebind)")
+            return None
+        except OSError as e:
+            return f"cannot verify the receipts path binding: {e}"
 
     @property
     def enabled(self) -> bool:
@@ -354,6 +391,12 @@ class DemoApprovalDriver:
                                "tenant": r.tenant, "environment": r.environment, "inputs": r.inputs,
                                "digest": r.digest, "issued_at": r.issued_at, "expires_at": r.expires_at})
         return hmac.new(self._PROCESS_KEY, body.encode(), hashlib.sha256).hexdigest()
+
+    def _mac_ok(self, r: ApprovalRequest) -> bool:
+        try:   # bytes compare: a non-ASCII / non-str mac must be a clean mismatch, never a TypeError
+            return hmac.compare_digest(str(r.mac).encode("utf-8", "surrogatepass"), self._mac(r).encode())
+        except Exception:  # noqa: BLE001
+            return False
 
     def _sign(self, r: ApprovalRequest) -> ApprovalRequest:
         return dataclasses.replace(r, mac=self._mac(r))
@@ -414,7 +457,7 @@ class DemoApprovalDriver:
         if why:
             raise DemoApprovalRefused(why, "disabled")
         pol = self.policy
-        if not isinstance(req, ApprovalRequest) or not hmac.compare_digest(str(req.mac), self._mac(req)):
+        if not isinstance(req, ApprovalRequest) or not self._mac_ok(req):
             raise DemoApprovalRefused("request was not issued by this driver or was modified", "request_tampered")
         if req.mission_id != mission_id:
             raise DemoApprovalRefused("request was issued for a different mission", "cross_mission")
@@ -427,6 +470,9 @@ class DemoApprovalDriver:
         with self._claim_lock():
             if self._burned(mission_id, req.digest):
                 raise DemoApprovalRefused("action digest already used (replay)", "replayed")
+            if self._failures(mission_id, req.node_id) >= self._max_failures:
+                raise DemoApprovalRefused(f"{self._max_failures} failed kernel approves on this gate; "
+                                          "a human must look (clear_failures to retry)", "too_many_failures")
             pending, live_inputs, m = self._live_gate(mission_id)
             if (getattr(m, "tenant", "") or "") != pol.tenant:
                 raise DemoApprovalRefused("mission tenant is not the designated demo tenant", "tenant_mismatch")
@@ -460,6 +506,8 @@ class DemoApprovalDriver:
                 self._write(RESULT_EVENT, "result", "approve" if granted else "failed", base,
                             outcome="granted" if granted else "failed", intent=intent["receipt_id"],
                             reason=f"{type(e).__name__}: {e}")
+                if not granted:
+                    self._sleep(self._backoff * (2 ** max(self._failures(mission_id, req.node_id) - 1, 0)))
                 if granted:   # the approval is on the log: the digest is spent, do not pretend otherwise
                     raise DemoApprovalRefused(f"kernel recorded the approval but raised afterwards: {e}",
                                               "approve_error_after_grant") from e
@@ -473,7 +521,10 @@ class DemoApprovalDriver:
         with self._PROC_LOCK:
             try:
                 os.makedirs(os.path.dirname(self.receipts_path) or ".", exist_ok=True)
-                fd = os.open(self.receipts_path + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
+                lock = self.receipts_path + ".lock"
+                if os.path.islink(lock):
+                    raise OSError("lock path is a symlink")
+                fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
             except OSError as e:
                 raise DemoApprovalRefused(f"cannot take the claim lock: {e}", "audit_failed") from None
             try:
@@ -506,6 +557,23 @@ class DemoApprovalDriver:
                 if e["type"] == RESULT_EVENT and e["payload"].get("outcome") == "granted":
                     return True
         return False
+
+    def _failures(self, mission_id: str, node_id: str) -> int:
+        n = 0
+        for rec in self._read_receipts():
+            if rec.get("mission_id") != mission_id or rec.get("node_id") != node_id:
+                continue
+            if rec.get("phase") == "clear_failures":
+                n = 0
+            elif rec.get("phase") == "result" and rec.get("outcome") == "failed":
+                n += 1
+        return n
+
+    def clear_failures(self, mission_id: str, node_id: str) -> None:
+        """Operator action: reset the failure cap for one gate."""
+        with self._claim_lock():
+            self._write("DemoAutoApprovalFailuresCleared", "clear_failures", "clear",
+                        dict(mission_id=mission_id, node_id=node_id, digest="", capability="", tenant="", environment=""))
 
     def _read_receipts(self) -> list[dict]:
         out = []

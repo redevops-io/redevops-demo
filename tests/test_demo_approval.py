@@ -37,6 +37,11 @@ class Clock:
 
 
 @pytest.fixture(autouse=True)
+def private_tmp_for_bindings(tmp_path, monkeypatch):
+    monkeypatch.setattr(da, "_binding_dir", lambda: str(tmp_path / "bind"))
+
+
+@pytest.fixture(autouse=True)
 def no_ambient_creds(monkeypatch):
     for k in da._REAL_CREDENTIAL_ENV:
         monkeypatch.delenv(k, raising=False)
@@ -671,3 +676,62 @@ def test_sim_runtime_does_not_write_into_a_real_tree(monkeypatch, tmp_path):
     monkeypatch.setattr(core, "TF_ROOT", "/explicit")
     dop.build_runtime(sim=True)
     assert core.TF_ROOT == "/explicit"      # an explicit root is respected
+
+
+# ---------------------------------------------------------------- re-verification items
+@pytest.mark.parametrize("mac", ["é" * 64, "\udcff", "\u0000", 12345, None])
+def test_non_ascii_or_odd_mac_is_clean_refusal(mac, env, clock, tmp_path):
+    rt, m = mission()
+    drv = driver(rt, env, clock, tmp_path)
+    req = drv.request(m.id)
+    refused("request_tampered", drv.approve, m.id, dataclasses.replace(req, mac=mac))
+    parked_at(rt, m, "infra.provision")
+    assert any(e["payload"].get("code") == "request_tampered" for e in rt.repo.timeline(m.id))
+
+
+def test_failure_cap_with_backoff_and_clear(env, clock, tmp_path):
+    rt, m = mission()
+    calls, naps = [], []
+
+    def boom(*a, **k):
+        calls.append(1)
+        raise RuntimeError("nope")
+    drv = driver(rt, env, clock, tmp_path, approve_fn=boom, sleep=naps.append)
+    req = drv.request(m.id)
+    for _ in range(3):
+        refused("approve_failed", drv.approve, m.id, req)
+    assert len(calls) == 3 and naps == [0.05, 0.1, 0.2]
+    for _ in range(10):
+        refused("too_many_failures", drv.approve, m.id, req)
+    assert len(calls) == 3                     # no more kernel calls
+    assert drv.drive(m.id)[-1]["code"] in ("too_many_failures",)
+    drv.clear_failures(m.id, req.node_id)
+    drv._approve = rt.approve
+    drv.approve(m.id, req)
+    parked_at(rt, m, "infra.configure")
+
+
+def test_lock_path_symlink_refused(env, clock, tmp_path):
+    rt, m = mission()
+    drv = driver(rt, env, clock, tmp_path)
+    req = drv.request(m.id)
+    target = tmp_path / "elsewhere"
+    target.write_text("")
+    (tmp_path / "r.jsonl.lock").symlink_to(target)
+    e = refused("audit_failed", drv.approve, m.id, req)
+    assert "symlink" in e.reason
+    parked_at(rt, m, "infra.provision")
+
+
+def test_one_receipts_path_per_policy_file(env, clock, tmp_path, monkeypatch):
+    f = _write_policy(tmp_path)
+    env[da.ENV_ALLOWLIST] = str(f)
+    rt, m = mission()
+
+    def mk(name):
+        return DemoApprovalDriver(rt, env=env, receipts_path=str(tmp_path / name), clock=clock, home=str(tmp_path))
+    assert mk("a.jsonl").enabled
+    assert mk("a.jsonl").enabled                       # same path: fine
+    other = mk("b.jsonl")
+    assert not other.enabled and "receipts path" in other.disabled_reason()
+    refused("disabled", other.request, m.id)
