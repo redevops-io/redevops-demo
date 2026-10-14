@@ -9,7 +9,7 @@ license = { text = "AGPL-3.0-only" }
 # The agentic-os kernel (agentic_os package), pinned to a released tag. AGENTIC_OS_ROOT can still point at a
 # source checkout to override it. NB: the kernel's apps/ tree (e.g. the `infra` operator) is NOT in the wheel;
 # it is only importable from a source checkout (set AGENTIC_OS_ROOT, or place one next to this repo).
-dependencies = ["agentic-os @ git+https://github.com/redevops-io/agentic-os.git@v0.3.25"]
+dependencies = ["agentic-os @ git+https://github.com/redevops-io/agentic-os.git@v0.3.30"]
 
 [project.optional-dependencies]
 aws = ["boto3>=1.34"]

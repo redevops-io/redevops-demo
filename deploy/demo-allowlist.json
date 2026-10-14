@@ -1,0 +1,12 @@
+{
+  "version": "2026-10-14.1",
+  "tenant": "demo-sandbox",
+  "environment": "isolated-demo",
+  "expires_at": "2027-06-30T00:00:00Z",
+  "allow": [
+    {"capability": "infra.provision", "params": {"infra_planned": null}},
+    {"capability": "infra.configure", "params": {"infra_provisioned": null}},
+    {"capability": "incident.remediate", "params": {"incident_diagnosis": null}},
+    {"capability": "sentinel.harden", "params": {"scan_report": null}}
+  ]
+}

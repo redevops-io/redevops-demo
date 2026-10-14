@@ -34,12 +34,23 @@ from agentic_os.mission.runtime import MissionRuntime  # noqa: E402
 from agentic_os.mission.store import EventStore  # noqa: E402
 from infra.operator import build_infra_operator  # noqa: E402
 
+from demo_common.demo_approval import (  # noqa: E402
+    add_auto_approve_arg, approval_edit, demo_tenant, plan_digest_of, run_auto_approve)
+
 CLOUD = "aws"  # -> infra/terraform/envs/aws
 
 
 def _sim_runner(argv, cwd=None):
     """Canned terraform/ansible outputs — the governed flow runs without touching AWS ($0)."""
     if "plan" in argv:
+        # Kernel >= v0.3.26 binds the approval to the sha256 of the SAVED plan file (`plan_digest`) and
+        # `infra.provision` refuses to apply without it. Real terraform writes that file via `-out=`; the
+        # canned runner must too, or the sim plan has no digest and the provision step is rejected.
+        chdir = next((a.split("=", 1)[1] for a in argv if a.startswith("-chdir=")), None)
+        out = next((a.split("=", 1)[1] for a in argv if a.startswith("-out=")), None)
+        if chdir and out and os.path.isdir(chdir):
+            with open(os.path.join(chdir, out), "w") as fh:
+                fh.write("sim-plan: 68 to add, 0 to change, 0 to destroy\n")
         return (0, "Plan: 68 to add, 0 to change, 0 to destroy.\n", "")
     if "apply" in argv:
         return (0, "Apply complete! Resources: 68 added, 0 changed, 0 destroyed.\n", "")
@@ -78,7 +89,27 @@ def estimate_cost_from_plan(plan_text: str) -> dict:
     }
 
 
+_SIM_ROOT: "str | None" = None
+
+
+def _use_sim_deploy_root() -> None:
+    """The simulated runner writes the saved plan file under the infra operator's terraform root. Unless the
+    operator explicitly set INFRA_DEPLOY_ROOT, point it at a throwaway dir so a sim run never writes into a real tree."""
+    global _SIM_ROOT
+    if os.environ.get("INFRA_DEPLOY_ROOT"):
+        return
+    import tempfile
+
+    import infra.core as core
+    if _SIM_ROOT is None:
+        _SIM_ROOT = os.path.join(tempfile.mkdtemp(prefix="redevops-demo-sim-"), "terraform")
+        os.makedirs(os.path.join(_SIM_ROOT, "envs", CLOUD))
+    core.TF_ROOT = _SIM_ROOT
+
+
 def build_runtime(sim: bool = True) -> MissionRuntime:
+    if sim:
+        _use_sim_deploy_root()
     run = _sim_runner if sim else None
     http_get = (lambda url: 200) if sim else None
     infra = build_infra_operator(run=run, http_get=http_get)
@@ -87,7 +118,9 @@ def build_runtime(sim: bool = True) -> MissionRuntime:
     reg.register(infra.manifest)
     reg.register(scanner.manifest)
     client = LocalOperatorClient({"infra": infra, "scanner": scanner})
-    return MissionRuntime(reg, Executor(client), store=EventStore())
+    rt = MissionRuntime(reg, Executor(client), store=EventStore())
+    rt.demo_simulated = bool(sim)   # DemoApprovalDriver refuses any runtime that is not the $0 simulator
+    return rt
 
 
 def build_http_runtime(operator_urls: dict, transport=None) -> MissionRuntime:
@@ -109,13 +142,32 @@ def build_http_runtime(operator_urls: dict, transport=None) -> MissionRuntime:
     return MissionRuntime(reg, Executor(client), store=EventStore())
 
 
-def create_deploy_mission(rt: MissionRuntime, goal: str = "Deploy the redevops-demo repo to AWS"):
+def create_deploy_mission(rt: MissionRuntime, goal: str = "Deploy the redevops-demo repo to AWS", tenant: str = ""):
     # scan:read → placeholder scanner (local build_runtime); ecr:read → edge-sentinel (HTTP/SIM=0 path).
     # Both provide `image_scanned`; granting both lets one mission definition drive either scanner.
     grants = ["infra:read", "infra:write", "scan:read", "ecr:read"]
-    m = rt.create_mission(goal, policy_refs=grants, template="deploy_app")
+    m = rt.create_mission(goal, policy_refs=grants, template="deploy_app", tenant=tenant)
     rt.run(m.id)
     return m
+
+
+def approve_provision(rt: MissionRuntime, mission_id: str, node_id: str, decision: str = "approve"):
+    """Resolve a gate as a human approver would. Kernel >= v0.3.26 refuses `terraform apply` unless the approval
+    carries the digest of the plan the human saw (`plan_digest_required`), so a provision approve passes it as the
+    typed edit. Other gates (e.g. infra.configure) take a plain approve."""
+    if decision != "approve":
+        return rt.approve(mission_id, node_id, decision)
+    edit = approval_edit(rt, mission_id, rt._capability_of(mission_id, node_id))
+    return rt.approve(mission_id, node_id, decision, edit=edit) if edit else rt.approve(mission_id, node_id, decision)
+
+
+def approve_all_gates(rt: MissionRuntime, mission_id: str, max_gates: int = 8) -> None:
+    """Human-style approval of every consecutive gate (provision, then configure) -- for tests / manual runs."""
+    for _ in range(max_gates):
+        pending = rt.repo.pending_human(mission_id)
+        if not pending:
+            return
+        approve_provision(rt, mission_id, pending["node_id"])
 
 
 def preflight_gate(session_factory=None, check_cloud: bool = True):
@@ -137,10 +189,16 @@ def preflight_gate(session_factory=None, check_cloud: bool = True):
     return report.ready, report
 
 
-def main() -> None:  # pragma: no cover — manual/demo driver
+def main(argv=None) -> None:  # pragma: no cover — manual/demo driver
+    import argparse
     import json
     from aws_demo.preflight import render
 
+    ap = argparse.ArgumentParser(description="redevops-demo deploy-and-operate mission")
+    add_auto_approve_arg(ap)
+    args = ap.parse_args(argv)
+    # legacy APPROVE=1 no longer approves unconditionally: it is the same request as --auto-approve
+    auto = args.auto_approve or os.environ.get("APPROVE") == "1"
     sim = os.environ.get("SIM", "1") != "0"
 
     # node 0: preflight gate — refuse to deploy into an unready environment
@@ -151,17 +209,15 @@ def main() -> None:  # pragma: no cover — manual/demo driver
         return
 
     rt = build_runtime(sim=sim)
-    m = create_deploy_mission(rt)
+    m = create_deploy_mission(rt, tenant=demo_tenant(auto))
     print(f"mission {m.id}  state={m.state.value}  (sim={sim})")
     pending = rt.repo.pending_human(m.id)
     if pending:
         print(f"⛔ APPROVAL GATE at node {pending.get('node_id')}: {pending.get('prompt', 'provision')}")
         print("   cost estimate:", json.dumps(estimate_cost_from_plan("Plan: 68 to add, 0 to change, 0 to destroy.")))
-        if os.environ.get("APPROVE") == "1":
-            rt.approve(m.id, pending["node_id"], "approve")
-            if m.state.value not in ("succeeded", "failed"):
-                rt.run(m.id)
-            print(f"→ approved · final state={m.state.value}")
+        if auto:
+            run_auto_approve(rt, m.id)
+            print(f"→ final state={m.state.value}")
 
 
 if __name__ == "__main__":

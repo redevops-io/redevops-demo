@@ -25,6 +25,7 @@ from agentic_os.mission.runtime import MissionRuntime  # noqa: E402
 from agentic_os.mission.store import EventStore  # noqa: E402
 from agentic_os.mission.types import ExecutionIntent, IntentStep  # noqa: E402
 
+from demo_common.demo_approval import add_auto_approve_arg, demo_tenant, run_auto_approve  # noqa: E402
 from operators.operate.operator import build_operate_operator  # noqa: E402
 
 
@@ -72,30 +73,34 @@ def build_runtime(env: "SimIncidentEnv | None" = None, sim: bool = True) -> Miss
     reg = CapabilityRegistry()
     reg.register(op.manifest)
     client = LocalOperatorClient({"operate": op})
-    return MissionRuntime(reg, Executor(client), store=EventStore())
+    rt = MissionRuntime(reg, Executor(client), store=EventStore())
+    rt.demo_simulated = isinstance(env, SimIncidentEnv)   # the auto-approve driver refuses non-simulated runtimes
+    return rt
 
 
-def create_incident_mission(rt: MissionRuntime, goal: str = "Restarts rising on the deployment — diagnose and remediate"):
+def create_incident_mission(rt: MissionRuntime, goal: str = "Restarts rising on the deployment — diagnose and remediate", tenant: str = ""):
     grants = ["obs:read", "k8s:write"]
-    m = rt.create_mission(goal, policy_refs=grants, template="incident_response")
+    m = rt.create_mission(goal, policy_refs=grants, template="incident_response", tenant=tenant)
     rt.run(m.id)
     return m
 
 
-def main() -> None:  # pragma: no cover — demo driver
+def main(argv=None) -> None:  # pragma: no cover — demo driver
+    import argparse
+    ap = argparse.ArgumentParser()
+    add_auto_approve_arg(ap)
+    auto = ap.parse_args(argv).auto_approve or os.environ.get("APPROVE") == "1"   # legacy APPROVE=1 == --auto-approve
     env = SimIncidentEnv()
     rt = build_runtime(env)
-    m = create_incident_mission(rt)
+    m = create_incident_mission(rt, tenant=demo_tenant(auto))
     print(f"incident {m.id}  state={m.state.value}")
     if env.diagnosis:
         print(f"🔎 diagnosis: {env.diagnosis['root_cause']}  (fix: {env.diagnosis['proposed_fix']['action']})")
     pending = rt.repo.pending_human(m.id)
     if pending:
         print(f"⛔ REMEDIATION GATE at {pending.get('node_id')}: {pending.get('prompt', 'apply fix?')}")
-        if os.environ.get("APPROVE") == "1":
-            rt.approve(m.id, pending["node_id"], "approve")
-            if m.state.value not in ("succeeded", "failed"):
-                rt.run(m.id)
+        if auto:
+            run_auto_approve(rt, m.id)
             healthy = not env.signals().get("oom")
             print(f"→ approved · remediated · verified healthy={healthy}  final={m.state.value}")
 

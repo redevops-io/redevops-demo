@@ -30,3 +30,4 @@ join-command.sh
 # secret-prone paths (hardening pass)
 _gl.json
 _raw.json
+.redevops-demo/
