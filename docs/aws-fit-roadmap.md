@@ -1,5 +1,11 @@
 # Context Runtime × AWS — from "seams" to production
 
+> **Status of this document: aspirational / planning.** Statements such as "production runtime" and
+> "roughly 80-90% already exists and runs" below are **unsupported by any artifact in this repo** (no coverage
+> or completeness measurement is committed), and the test counts quoted are author-reported and not reproducible
+> from this repo. Treat them as roadmap intent, not verified fact. Current maturity of this repo: simulation-only
+> (see [../STATUS.md](../STATUS.md)).
+
 **Companion to the blog post** [*The Context Runtime Meets the AWS Agent Stack*](https://redevops.io/blog/context-runtime-meets-the-aws-agent-stack).
 
 This started as "what do we build for AWS." The file-level audit that follows — of `contextos`
@@ -24,10 +30,10 @@ turned up a more important conclusion than the AWS roadmap itself.
 
 ## The headline
 
-**Context Runtime is no longer a research project. It's a production runtime with a surprisingly
+**[Unsupported / aspirational claim]** Context Runtime is no longer a research project. It's a production runtime with a surprisingly
 small number of missing pieces — and the missing pieces are adapters, not AI.**
 
-Roughly **80–90% of the runtime already exists and runs**: the planner, the cost model, the execution
+**[Unsupported estimate, not measured]** Roughly **80–90% of the runtime already exists and runs**: the planner, the cost model, the execution
 graph, the representation router, the mission kernel, the governance/approval/saga machinery, and the
 entire learning subsystem. What's left is a short, *bounded* list of integration work:
 
