@@ -2,9 +2,41 @@
 
 [![NVIDIA Inception](https://img.shields.io/badge/NVIDIA-Inception%20Program%20Member-76B900.svg)](https://www.nvidia.com/en-us/startups/)
 
+**What it does.** A governed deploy-and-operate demo: missions plan, gate (human approval), "provision", scan,
+harden, and remediate an EKS-shaped stack, with every consequential step gated and replayable.
+**Everything runs against in-process simulators ($0, `SIM=1`).** The repo also contains Terraform for AWS
+(and Azure/GCP/DigitalOcean) and a real-mode path, but **no real cloud apply is claimed or evidenced here**:
+"real `apply`" is listed under **Next**. Despite older wording elsewhere, this repo does **not** currently
+provision, secure or self-heal a real EKS stack.
+
+**Who it's for.** People evaluating how Mission Runtime, Context Runtime and Sidekick fit together on a
+deploy-and-operate workflow, and contributors to those projects.
+
+**Maturity: simulation-only.** (version `0.0.0`, no tags or releases; see [STATUS.md](STATUS.md).)
+
+**3-minute example** (no cloud, no credentials):
+```bash
+uv venv .venv && uv pip install --python .venv -e ".[dev]"
+.venv/bin/pytest                          # zero cloud calls
+SIM=1 .venv/bin/python -m missions.deploy_operate   # simulated deploy-and-operate mission, parks at an approval gate
+```
+
+**Evidence.** The test suite under [`tests/`](tests/) (run it yourself; this repo commits no test report, and
+the CI workflow is [`.github/workflows/tests.yml`](.github/workflows/tests.yml)). No real `terraform plan`/`apply`
+output, cost report or cloud bill is committed.
+
+**Limitations.** Simulated runtime only; numbers quoted below (68 resources, ~$0.31/hr, test counts) are
+*Illustrative/synthetic* and not reproducible as real-cloud results from this repo (details under
+[Status](#status)). Hosted-demo behaviour is not covered here. Safety notes on `--auto-approve` are below.
+
+**Docs.** [PLAN.md](PLAN.md) · [docs/getting-started.md](docs/getting-started.md) · [docs/aws-permissions.md](docs/aws-permissions.md) · [docs/aws-fit-roadmap.md](docs/aws-fit-roadmap.md) (aspirational) · [STATUS.md](STATUS.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md)
+
+---
+
 A **self-demonstrating**, **multi-cloud** ReDevOps demo: this repo *contains* the Terraform + Ansible
-it deploys, so one prompt in **Projects** deploys it onto a hyperscaler and then **secures, hardens,
-monitors, and heals** it — every consequential step gated, inspectable, and replayable.
+it deploys, so one prompt in **Projects** is designed to deploy it onto a hyperscaler and then **secure, harden,
+monitor, and heal** it — every consequential step gated, inspectable, and replayable. *Today this is exercised
+only against simulators; see Maturity above.*
 
 The same governed deploy-and-operate spine targets four clouds through one cloud-agnostic
 `deployment-preflight` contract; only each cloud's managed-Kubernetes + registry Terraform and its
@@ -12,7 +44,7 @@ credential model differ.
 
 | Cloud | Managed k8s + registry | Env | Binding | Status |
 |---|---|---|---|---|
-| **AWS** | EKS + ECR | `infra/terraform/envs/aws` | `aws_demo/` | **deployed + validated** (`terraform plan` = 68 res, $0) |
+| **AWS** | EKS + ECR | `infra/terraform/envs/aws` | `aws_demo/` | **simulated** end to end ($0); Terraform for a trimmed EKS env is in the repo; the "68 resources" figure is from the simulator's canned plan (see [Status](#status)); real `apply` not done (listed under **Next**) |
 | **Azure** | AKS + ACR | `infra/terraform/envs/azure` | `azure_demo/` | IaC + binding, **sim-validated** ($0) |
 | **GCP** | GKE + Artifact Registry | `infra/terraform/envs/gcp` | `gcp_demo/` | IaC + binding, **sim-validated** ($0) |
 | **DigitalOcean** | DOKS + DOCR | `infra/terraform/envs/digitalocean` | `do_demo/` | IaC + binding, **sim-validated** ($0) |
@@ -31,7 +63,7 @@ Mission Runtime ── governs plan · gate · verify · saga · replay
    ├── Context Runtime ── decides retrieval arm + model per step
    └── Sidekick ──────── DevOps agent: Vault→cloud creds, terraform/ansible/kubectl, monitor loop
                           │
-                          ▼  (real managed k8s: EKS · AKS · GKE · DOKS)
+                          ▼  (target: managed k8s — EKS · AKS · GKE · DOKS; simulated in this repo today)
                   managed k8s + Helm monitoring + edge-sentinel + Agentic Compliance/Privacy
 ```
 
@@ -43,10 +75,10 @@ Mission Runtime ── governs plan · gate · verify · saga · replay
 - Attachable **IAM policies** (`infra/iam/`) + safety roles + scripts
 
 **Phase 1 — governed deploy spine (sim-first, $0)** ✅
-- Trimmed **EKS env + Helm monitoring** Terraform — `terraform plan` = **68 real resources, $0**
+- Trimmed **EKS env + Helm monitoring** Terraform in `infra/terraform/envs/aws`; the "68 resources, $0" figure is the simulator's canned plan text (`missions/deploy_operate.py`), *Illustrative/synthetic*: no real `terraform plan` output is committed
 - Real **infra operator** wired to `infra/terraform/envs/aws` (`/invoke` service)
 - **Deploy-and-operate mission** runs in-process: scan → plan → **⛔ approval gate** (plan + cost
-  evidence, ~$0.31/hr) → provision → configure → verify; **18 tests green**
+  evidence, ~$0.31/hr, *Illustrative*: computed by `estimate_cost_from_plan` from the canned plan, not a cloud bill) → provision → configure → verify; "18 tests green" is a historical author-reported count, not reproducible from a committed report
 - Run it: `SIM=1 python -m missions.deploy_operate`
 
 **Onboarding — Sidekick tells you what's required** ✅
@@ -68,19 +100,19 @@ Mission Runtime ── governs plan · gate · verify · saga · replay
   `sentinel.harden` (gated rebuild `--pull` + push) · `sentinel.rollout` (`kubectl rollout restart`) ·
   `sentinel.rescan` (confirm cleared)
 - **Governed harden loop** (`missions/harden_images.py`): scan finds a seeded CVE → **⛔ "harden?" gate**
-  → approve → rebuild+push → rollout → re-scan **cleared** (reject hardens nothing). **26 tests green.**
+  → approve → rebuild+push → rollout → re-scan **cleared** (reject hardens nothing). ("26 tests green": historical author-reported count, not reproducible from a committed report.)
 - Run it: `python -m missions.harden_images` (parks at the gate; add `--auto-approve` only in isolated demo mode, see below)
 
 **Phase 3 — operate loop + security posture (sim-first, $0)** ✅
 - **Induced-fault operate loop** (`missions/incident_response.py`, the "wow"): rising restarts →
   gather evidence → diagnose (*memory limit too low*) → **⛔ remediation gate** → raise memory →
-  **verify healthy**. Models CloudWatch/Prometheus alarm → incident mission (no silent mutation).
+  **verify healthy** (simulated). Models CloudWatch/Prometheus alarm → incident mission (no silent mutation).
 - **Agentic Compliance + Privacy** (`missions/posture.py`): CIS scan of a seeded vulnerable workload;
   PII scan of a synthetic dataset (**inactive with no data source — never fakes findings**). The
   kernel marks the whole compliance/privacy domain **regulatory → even the scan is gated**.
-- Run: `python -m missions.incident_response` (parks at the gate; `--auto-approve` only in isolated demo mode, see below). **34 tests green.**
+- Run: `python -m missions.incident_response` (parks at the gate; `--auto-approve` only in isolated demo mode, see below). ("34 tests green": historical author-reported count; run `pytest` for the current result.)
 
-**Next:** Phase 4 (Bedrock/AgentCore/Strands + outreach capstone), then the real `apply` for a recorded run.
+**Next:** Phase 4 (Bedrock/AgentCore/Strands + outreach capstone), then the real `apply` for a recorded run (not done yet).
 
 ## Quickstart (local, no cloud)
 ```bash
@@ -90,7 +122,7 @@ uv venv .venv && uv pip install --python .venv -e ".[dev]"
 
 ## Bring the cockpit up (mirrors the one-click guide)
 ```bash
-./scripts/up.sh                       # Projects → http://localhost:8080/cockpit
+./scripts/up.sh                       # Projects → http://localhost:8080/cockpit (root compose.yml maps 8080 -> container 8000)
 ```
 
 ## Run the demo — Sidekick governing the five operators
@@ -109,7 +141,7 @@ SIM=1 docker compose -f deploy/compose.demo.yml up --build
 # Sidekick injects Vault→STS short-lived creds before the provision gate.
 docker compose -f deploy/compose.demo.yml up --build
 ```
-Then open the Projects cockpit at http://localhost:8000/cockpit and start the deploy mission — it
+Then open the Projects cockpit at http://localhost:8000/cockpit (this `deploy/compose.demo.yml` publishes 8000; the root `compose.yml` used by `scripts/up.sh` publishes 8080) and start the deploy mission — it
 plans + scans, pauses at the provision approval gate with the terraform plan + cost estimate, then
 provisions → configures → verifies across the federated operators. The `agentic_os` kernel is a pinned pip dependency
 (`pip install -e .`); `AGENTIC_OS_ROOT` still overrides it with a source checkout, which is also needed for the
@@ -210,8 +242,7 @@ Each cloud follows the same shape — a scoped credential in Vault + the demo en
 
 For AWS specifically: a dedicated **us-east-1** account with **Bedrock model access + AgentCore**, and
 `terraform apply` the **safety** module (`infra/terraform/safety/`) → three roles + Budgets kill-switch.
-**AWS is the deployed/validated cloud today; Azure/GCP/DigitalOcean ship as sim-validated IaC + bindings**
-(`terraform validate` clean) and haven't been applied to real infra yet.
+**AWS is the most developed cloud binding, but all clouds are sim-validated only: no cloud has been applied to real infra from this repo's evidence** (Azure/GCP/DigitalOcean: IaC + bindings, `terraform validate` clean).
 
 Safety is layered: **in-runtime** budget guard + approval gates on every consequential step, and an
 **out-of-band** budget alarm + auto-destroy that works even if the runtime is down. No cloud keys live in
