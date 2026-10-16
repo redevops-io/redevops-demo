@@ -24,7 +24,15 @@ def test_scan_reports_findings_then_hardens_on_approval():
     rt.approve(m.id, pending["node_id"], "approve")
     if m.state not in (MissionState.SUCCEEDED, MissionState.FAILED):
         rt.run(m.id)
+    # the rollout restart is its own approval-gated step
+    assert m.state == MissionState.WAITING_HUMAN
+    assert env.hardened is True and env.restarted is False
+    pending = rt.repo.pending_human(m.id)
+    rt.approve(m.id, pending["node_id"], "approve")
+    if m.state not in (MissionState.SUCCEEDED, MissionState.FAILED):
+        rt.run(m.id)
     assert m.state == MissionState.SUCCEEDED
+    assert env.restarted is True
     assert env.hardened is True  # image was rebuilt+pushed
 
     # the re-scan now reports cleared

@@ -52,6 +52,7 @@ class SimEcrEnv:
     def __init__(self, critical: int = 1, high: int = 2):
         self._crit, self._high = critical, high
         self.hardened = False
+        self.restarted = False
 
     # --- ECR client surface ---
     def start_image_scan(self, **_):
@@ -69,6 +70,8 @@ class SimEcrEnv:
     def run(self, argv, cwd=None):
         if "push" in argv or "build" in argv:
             self.hardened = True
+        if "restart" in argv:
+            self.restarted = True
         return (0, "ok", "")
 
 

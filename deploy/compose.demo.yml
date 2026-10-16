@@ -8,10 +8,10 @@
 # code. This compose lives in the demo repo because the demo repo owns the operators.
 #
 # Bring up ($0 dry run — every operator short-circuits to its in-process simulator):
-#   SIM=1 docker compose -f deploy/compose.demo.yml up --build
+#   docker compose -f deploy/compose.demo.yml up --build
 # Then open the Projects cockpit at http://localhost:8000/cockpit and run the deploy mission.
 #
-# Real mode (SIM=0, the default): operators shell out to terraform/aws/kubectl. Provide AWS creds
+# Real mode (SIM=0, explicit opt-in): operators shell out to terraform/aws/kubectl. Provide AWS creds
 # (env or a mounted profile) — Sidekick resolves them from Vault via STS assume-role in the real flow.
 #
 # AGENTIC_OS_ROOT defaults to the sibling checkout (github.com/redevops-io/agentic-os next to this repo).
@@ -23,7 +23,7 @@ x-operator: &operator
     dockerfile: operators/Dockerfile
   image: redevops-demo-operator:latest
   environment: &operator-env
-    SIM: ${SIM:-0}                                # 0 = real terraform/aws/kubectl; 1 = $0 simulators
+    SIM: ${SIM:-1}                                # 1 (default) = $0 simulators; 0 = real terraform/aws/kubectl
     AGENTIC_OS_ROOT: /opt/agentic-os
     PYTHONPATH: /app:/opt/agentic-os:/opt/agentic-os/apps
     # AWS creds for SIM=0 (optional; Sidekick injects Vault→STS creds in the real flow)
@@ -45,27 +45,27 @@ services:
       OPERATOR: infra
       PORT: "8230"
       INFRA_DEPLOY_ROOT: /app/infra/terraform/envs/aws   # what `provision` plans/applies
-    ports: ["8230:8230"]
+    ports: ["127.0.0.1:8230:8230"]
 
   edge-sentinel:
     <<: *operator
     environment: {<<: *operator-env, OPERATOR: edge-sentinel, PORT: "8241"}
-    ports: ["8241:8241"]
+    ports: ["127.0.0.1:8241:8241"]
 
   operate:
     <<: *operator
     environment: {<<: *operator-env, OPERATOR: operate, PORT: "8242"}
-    ports: ["8242:8242"]
+    ports: ["127.0.0.1:8242:8242"]
 
   agentic-compliance:
     <<: *operator
     environment: {<<: *operator-env, OPERATOR: agentic-compliance, PORT: "8243"}
-    ports: ["8243:8243"]
+    ports: ["127.0.0.1:8243:8243"]
 
   agentic-privacy:
     <<: *operator
     environment: {<<: *operator-env, OPERATOR: agentic-privacy, PORT: "8244"}
-    ports: ["8244:8244"]
+    ports: ["127.0.0.1:8244:8244"]
 
   # ── Sidekick (agentic-os) — governs the operators above via modules.yaml ────────────────────────
   sidekick:
@@ -73,7 +73,7 @@ services:
       context: ${AGENTIC_OS_ROOT:-../../agentic-os}
       dockerfile: deploy/sidekick-devops/Dockerfile
     image: sidekick-devops:latest
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     environment:
       MODEL_ENDPOINT: ${MODEL_ENDPOINT:-}
       SIDEKICK_MODULES: /app/modules.yaml         # → federate the five operators
