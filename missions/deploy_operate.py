@@ -34,6 +34,7 @@ from agentic_os.mission.runtime import MissionRuntime  # noqa: E402
 from agentic_os.mission.store import EventStore  # noqa: E402
 from infra.operator import build_infra_operator  # noqa: E402
 
+from demo_common.simmode import sim_enabled  # noqa: E402
 from demo_common.demo_approval import (  # noqa: E402
     add_auto_approve_arg, approval_edit, demo_tenant, plan_digest_of, run_auto_approve)
 
@@ -199,7 +200,7 @@ def main(argv=None) -> None:  # pragma: no cover — manual/demo driver
     args = ap.parse_args(argv)
     # legacy APPROVE=1 no longer approves unconditionally: it is the same request as --auto-approve
     auto = args.auto_approve or os.environ.get("APPROVE") == "1"
-    sim = os.environ.get("SIM", "1") != "0"
+    sim = sim_enabled()
 
     # node 0: preflight gate — refuse to deploy into an unready environment
     ready, report = preflight_gate(check_cloud=not sim)

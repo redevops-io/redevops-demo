@@ -20,7 +20,9 @@ for _p in (_ROOT, os.path.join(_ROOT, "apps"), str(pathlib.Path(__file__).resolv
 from fastapi import FastAPI  # noqa: E402
 
 OPERATOR = os.environ.get("OPERATOR", "infra")
-SIM = os.environ.get("SIM", "1") == "1"  # default 1 → in-process simulators (no cloud calls, $0); SIM=0 → real
+from demo_common.simmode import sim_enabled  # noqa: E402
+
+SIM = sim_enabled()  # default 1 → in-process simulators (no cloud calls, $0); SIM=0 → real
 
 
 def build_operator():

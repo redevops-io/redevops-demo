@@ -11,7 +11,7 @@ services:
   projects:
     image: ${PROJECTS_IMAGE:-mission-plane-demo:live-perms}   # built from the agentic-os mission kernel
     ports:
-      - "8080:8000"        # http://localhost:8080/cockpit
+      - "127.0.0.1:8080:8000"        # http://localhost:8080/cockpit
     environment:
       VAULT_ADDR: ${VAULT_ADDR:-http://host.docker.internal:8200}
       DEMO_BUDGET_USD: ${DEMO_BUDGET_USD:-100}

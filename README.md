@@ -122,7 +122,7 @@ uv venv .venv && uv pip install --python .venv -e ".[dev]"
 
 ## Bring the cockpit up (mirrors the one-click guide)
 ```bash
-./scripts/up.sh                       # Projects → http://localhost:8080/cockpit (root compose.yml maps 8080 -> container 8000)
+./scripts/up.sh                       # Projects → http://localhost:8080/cockpit (root compose.yml maps 127.0.0.1:8080 -> container 8000)
 ```
 
 ## Run the demo — Sidekick governing the five operators

@@ -168,3 +168,41 @@ def test_auto_approval_driver_disabled_leaves_mission_staged(tmp_path):
     drv = DemoApprovalDriver(rt, env={}, receipts_path=str(tmp_path / "r.jsonl"), home=str(tmp_path / "home"))
     assert not drv.enabled
     assert m.state == MissionState.WAITING_HUMAN and sim.hardened is False
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (None, True), ("1", True), ("0", False), ("true", True), ("True", True), ("yes", True), ("", True),
+    ("0 ", True), (" 0", True), ("00", True), ("false", True), ("off", True),
+])
+def test_sim_switch_only_exact_zero_is_real(raw, expected):
+    from demo_common.simmode import sim_enabled
+    env = {} if raw is None else {"SIM": raw}
+    assert sim_enabled(env) is expected
+
+
+@pytest.mark.parametrize("cap,bad", [
+    ("sentinel.harden", {"tag": "latest\n"}),
+    ("sentinel.harden", {"repo": "outreach-engine\n"}),
+    ("sentinel.rollout", {"deployment": "outreach-engine\n"}),
+    ("incident.remediate", {"fix": {**FIX, "to": "512Mi\n"}}),
+    ("compliance.remediate", {"findings": [{"workload": "outreach-engine\n", "control": "c"}]}),
+    ("compliance.remediate", {"findings": [{"workload": "outreach-engine", "control": "c\n"}]}),
+])
+def test_trailing_newline_values_are_refused(cap, bad):
+    rec, ops = _ops()
+    op, inputs = ops[cap]
+    r = op.invoke(cap, {**inputs, **bad, "_approval": {"approved": True}}, "")
+    assert r["status"] == "refused" and rec.calls == []
+
+
+@pytest.mark.parametrize("marker", [True, "yes", 1, [1], {}])
+def test_non_marker_approval_values_stage(marker):
+    rec, ops = _ops()
+    op, inputs = ops["sentinel.rollout"]
+    r = op.invoke("sentinel.rollout", {**inputs, "_approval": marker}, "")
+    assert r["status"] == "pending_approval" and rec.calls == []
+
+
+def test_root_compose_binds_loopback():
+    text = (REPO / "compose.yml").read_text()
+    assert '"127.0.0.1:8080:8000"' in text
