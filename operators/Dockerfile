@@ -31,7 +31,7 @@ ENV AGENTIC_OS_ROOT=/opt/agentic-os \
     PYTHONPATH=/app:/opt/agentic-os:/opt/agentic-os/apps \
     OPERATOR=infra \
     PORT=8230 \
-    SIM=0
+    SIM=1
 
 EXPOSE 8230 8241 8242 8243 8244
 # operators/service.py builds the operator named by $OPERATOR and mounts /capabilities + /invoke

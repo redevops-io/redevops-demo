@@ -1,8 +1,8 @@
 """Serve any of our operators as a Mission Runtime `/invoke` HTTP service.
 
 One image, selected by env:  OPERATOR=infra|edge-sentinel|operate|agentic-compliance|agentic-privacy
-Mounts GET /capabilities + POST /invoke (via the operator's router) + GET /health. Real mode by
-default (terraform/aws/kubectl); SIM=1 wires the in-process sims for a dry run.
+Mounts GET /capabilities + POST /invoke (via the operator's router) + GET /health. Simulation by
+default (SIM=1, in-process sims, no cloud calls); SIM=0 opts into terraform/aws/kubectl.
 
 Run:  OPERATOR=edge-sentinel uvicorn operators.service:app --port 8241
 """
@@ -20,7 +20,7 @@ for _p in (_ROOT, os.path.join(_ROOT, "apps"), str(pathlib.Path(__file__).resolv
 from fastapi import FastAPI  # noqa: E402
 
 OPERATOR = os.environ.get("OPERATOR", "infra")
-SIM = os.environ.get("SIM", "0") == "1"  # SIM=1 → in-process simulators (no cloud calls, $0)
+SIM = os.environ.get("SIM", "1") == "1"  # default 1 → in-process simulators (no cloud calls, $0); SIM=0 → real
 
 
 def build_operator():

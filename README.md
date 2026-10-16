@@ -134,12 +134,13 @@ missions over `POST /invoke`, without importing the operator code (see
 `agentic-os/deploy/sidekick-devops/federation.py`).
 
 ```bash
-# $0 dry run — every operator short-circuits to its in-process simulator:
-SIM=1 docker compose -f deploy/compose.demo.yml up --build
-
-# Real mode (SIM=0, default): operators shell out to terraform/aws/kubectl.
-# Sidekick injects Vault→STS short-lived creds before the provision gate.
+# $0 dry run (default, SIM=1) — every operator short-circuits to its in-process simulator.
+# Ports are published on 127.0.0.1 only.
 docker compose -f deploy/compose.demo.yml up --build
+
+# Real mode (explicit opt-in, SIM=0): operators shell out to terraform/aws/kubectl.
+# Sidekick injects Vault→STS short-lived creds before the provision gate.
+SIM=0 docker compose -f deploy/compose.demo.yml up --build
 ```
 Then open the Projects cockpit at http://localhost:8000/cockpit (this `deploy/compose.demo.yml` publishes 8000; the root `compose.yml` used by `scripts/up.sh` publishes 8080) and start the deploy mission — it
 plans + scans, pauses at the provision approval gate with the terraform plan + cost estimate, then

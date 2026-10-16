@@ -14,6 +14,7 @@ if pathlib.Path(_ROOT).exists() and _ROOT not in sys.path:
 from agentic_os.mission.operator_sdk import Operator, capability  # noqa: E402
 
 from . import core  # noqa: E402
+from operators import guard  # noqa: E402
 
 
 def build_operate_operator(*, env=None, run=None) -> Operator:
@@ -33,9 +34,18 @@ def build_operate_operator(*, env=None, run=None) -> Operator:
             env.diagnosis = dx
         return dx
 
+    def _fix(i):
+        return (getattr(env, "diagnosis", None) or {}).get("proposed_fix") if env is not None else i.get("fix")
+
     def _remediate(i):
-        fix = (getattr(env, "diagnosis", None) or {}).get("proposed_fix") if env is not None else i.get("fix")
+        fix = _fix(i)
+        err = guard.check_fix(fix)
+        if err:
+            return guard.refused("incident.remediate", err, incident_remediated=False)
         return core.remediate(fix, run=run)
+
+    def _check_remediate(i):
+        return guard.check_fix(_fix(i))
 
     def _verify(i):
         return core.verify_health(i.get("deployment", "outreach-engine"), i.get("namespace", "default"),
@@ -46,7 +56,8 @@ def build_operate_operator(*, env=None, run=None) -> Operator:
                    permissions=["obs:read"], estimated_value="high", latency_ms=6000),
         capability("incident.diagnose", _diagnose, provides=["incident_diagnosis"],
                    permissions=["obs:read"], estimated_value="high", latency_ms=8000),
-        capability("incident.remediate", _remediate, provides=["incident_remediated"],
+        capability("incident.remediate",
+                   guard.guarded("incident.remediate", _remediate, _check_remediate, incident_remediated=False), provides=["incident_remediated"],
                    side_effecting=True, approval_required=True, undo="incident.rollback",  # the fix gate
                    permissions=["k8s:write"], estimated_value="high", latency_ms=60000),
         capability("incident.verify", _verify, provides=["incident_verified"],
