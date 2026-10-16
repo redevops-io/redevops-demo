@@ -19,6 +19,5 @@
 - Port: scripts/up.sh and root compose.yml serve the cockpit on :8080, deploy/compose.demo.yml on :8000
 - Figures (68 resources, ~$0.31/hr, 18/26/34 tests) are illustrative/historical and not backed by a committed report
 - docs/aws-fit-roadmap.md is aspirational; its 'production runtime' and '80-90%' statements are unsupported
-- Licence label differs from sibling repos (AGPL-3.0-only here): counsel item, not edited
 
 No quantitative claim in this repo has been externally reproduced or field validated.
