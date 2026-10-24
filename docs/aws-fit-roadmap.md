@@ -237,7 +237,7 @@ roles.tf`) with no code behind them — this fills that in.
 alongside OpenSearch + the local arms. With 2.1–2.3 in place, the payoff artifact lands: an offline
 benchmark where **CR learns when Bedrock KB vs OpenSearch vs local hybrid wins per query class** — the
 article's thesis, measured. This is the demo centrepiece and the moment "CR optimizes over AWS" stops
-being positioning and starts being a running system.
+being a design and starts being a running system.
 
 ### 2.4 Context-serving sidecar for AgentCore / Strands agents  ·  ●(local)→●(AWS)
 `control_plane/app.py` already serves `POST /librechat/retrieve` → `{strategy, method, hits, context,
