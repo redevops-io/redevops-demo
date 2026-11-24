@@ -8,8 +8,10 @@
 # code. This compose lives in the demo repo because the demo repo owns the operators.
 #
 # Bring up ($0 dry run — every operator short-circuits to its in-process simulator):
-#   docker compose -f deploy/compose.demo.yml up --build
-# Then open the Projects cockpit at http://localhost:8000/cockpit and run the deploy mission.
+#   ./scripts/demo-env.sh                                    # once: writes deploy/.env with a control token and an approval secret
+#   docker compose --env-file deploy/.env -f deploy/compose.demo.yml up --build
+# Then open the Projects cockpit at http://localhost:8000/cockpit, paste the control token (printed by demo-env.sh) into the token
+# field, and run the deploy mission.
 #
 # Real mode (SIM=0, explicit opt-in): operators shell out to terraform/aws/kubectl. Provide AWS creds
 # (env or a mounted profile) — Sidekick resolves them from Vault via STS assume-role in the real flow.
@@ -24,6 +26,10 @@ x-operator: &operator
   image: redevops-demo-operator:latest
   environment: &operator-env
     SIM: ${SIM:-1}                                # 1 (default) = $0 simulators; 0 = real terraform/aws/kubectl
+    # Kernel >= v0.4.0 fails closed without these: an operator refuses /invoke without the control token, and executes an approved action only
+    # when the approval was signed with the secret it shares with Sidekick. Generate both once with scripts/demo-env.sh (writes deploy/.env).
+    AGENTIC_OS_CONTROL_TOKEN: ${AGENTIC_OS_CONTROL_TOKEN:?run scripts/demo-env.sh first (it writes deploy/.env)}
+    AGENTIC_OS_APPROVAL_SECRET: ${AGENTIC_OS_APPROVAL_SECRET:?run scripts/demo-env.sh first (it writes deploy/.env)}
     AGENTIC_OS_ROOT: /opt/agentic-os
     PYTHONPATH: /app:/opt/agentic-os:/opt/agentic-os/apps
     # AWS creds for SIM=0 (optional; Sidekick injects Vault→STS creds in the real flow)
@@ -35,6 +41,13 @@ x-operator: &operator
     - ..:/app:ro                                  # operators/, infra/, missions/, aws_demo/
     - ${AGENTIC_OS_ROOT:-../../agentic-os}:/opt/agentic-os:ro
   restart: unless-stopped
+  # Sidekick discovers the operators ONCE, at its own start, and skips any that does not answer yet. Without this check it starts as soon as the
+  # operator containers exist, and an operator that is still importing is silently left out of the federation.
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT}/capabilities >/dev/null"]
+    interval: 3s
+    timeout: 3s
+    retries: 20
 
 services:
   # ── the five operators (one image, OPERATOR selects which) ──────────────────────────────────────
@@ -75,12 +88,25 @@ services:
     image: sidekick-devops:latest
     ports: ["127.0.0.1:8000:8000"]
     environment:
+      # The same two values as the operators: Sidekick sends the control token on every /invoke and signs approvals with the secret. The cockpit
+      # asks for the control token too ("Use token"); without one every mission endpoint answers 503.
+      AGENTIC_OS_CONTROL_TOKEN: ${AGENTIC_OS_CONTROL_TOKEN:?run scripts/demo-env.sh first (it writes deploy/.env)}
+      AGENTIC_OS_APPROVAL_SECRET: ${AGENTIC_OS_APPROVAL_SECRET:?run scripts/demo-env.sh first (it writes deploy/.env)}
       MODEL_ENDPOINT: ${MODEL_ENDPOINT:-}
       SIDEKICK_MODULES: /app/modules.yaml         # → federate the five operators
+      # A federated operator is a third-party capability source to the kernel: listed, but not bindable until its source is trusted. This file
+      # trusts exactly the five operators of this demo (operators/trusted-sources, one `http:<operator>` per line).
+      AGENTIC_OS_TRUST_FILE: /app/trusted-sources
       OPERATOR_TIMEOUT: ${OPERATOR_TIMEOUT:-60}
       MONITOR_ENABLED: ${MONITOR_ENABLED:-1}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
     volumes:
       - ../operators/modules.yaml:/app/modules.yaml:ro
-    depends_on: [infra, edge-sentinel, operate, agentic-compliance, agentic-privacy]
+      - ../operators/trusted-sources:/app/trusted-sources:ro
+    depends_on:
+      infra: {condition: service_healthy}
+      edge-sentinel: {condition: service_healthy}
+      operate: {condition: service_healthy}
+      agentic-compliance: {condition: service_healthy}
+      agentic-privacy: {condition: service_healthy}
     restart: unless-stopped
