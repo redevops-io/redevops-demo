@@ -19,6 +19,12 @@ from operators.agentic_privacy.operator import build_privacy_operator  # noqa: E
 from operators.edge_sentinel.operator import build_edge_sentinel_operator  # noqa: E402
 from operators.operate.operator import build_operate_operator  # noqa: E402
 
+
+def control_headers() -> dict:
+    """The caller credential an operator's /invoke requires (kernel >= v0.4.0); conftest sets a throwaway token for every test."""
+    import os
+    return {"Authorization": "Bearer " + os.environ["AGENTIC_OS_CONTROL_TOKEN"]}
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 FIX = {"action": "raise_memory", "deployment": "outreach-engine", "namespace": "default", "to": "512Mi"}
 FINDINGS = [{"workload": "outreach-engine", "control": "run-as-non-root"}]
@@ -41,7 +47,7 @@ def _client(op):
 
 
 def _invoke(c, cap, inputs):
-    return c.post("/invoke", json={"capability": cap, "inputs": inputs}).json()["result"]
+    return c.post("/invoke", json={"capability": cap, "inputs": inputs}, headers=control_headers()).json()["result"]
 
 
 class FakeEcr:

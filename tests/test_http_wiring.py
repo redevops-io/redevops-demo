@@ -16,6 +16,12 @@ from operators.edge_sentinel.operator import build_edge_sentinel_operator  # noq
 from infra.operator import build_infra_operator  # noqa: E402
 
 
+def control_headers() -> dict:
+    """The caller credential an operator's /invoke requires (kernel >= v0.4.0); conftest sets a throwaway token for every test."""
+    import os
+    return {"Authorization": "Bearer " + os.environ["AGENTIC_OS_CONTROL_TOKEN"]}
+
+
 def _mount(op) -> TestClient:
     app = FastAPI()
     app.include_router(op.router())
@@ -27,7 +33,7 @@ def test_operator_service_exposes_capabilities_and_invoke():
     caps = c.get("/capabilities").json()
     names = [x["name"] for x in caps["capabilities"]]
     assert "sentinel.scan" in names and "sentinel.harden" in names
-    r = c.post("/invoke", json={"capability": "sentinel.scan", "inputs": {}}).json()
+    r = c.post("/invoke", json={"capability": "sentinel.scan", "inputs": {}}, headers=control_headers()).json()
     assert r["result"]["needs_hardening"] is True
 
 

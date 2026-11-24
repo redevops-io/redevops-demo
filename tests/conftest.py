@@ -54,3 +54,7 @@ def hermetic_kernel_secrets(tmp_path, monkeypatch):
     for k in ("HOME", "XDG_CONFIG_HOME", "APPDATA", "USERPROFILE"):
         monkeypatch.setenv(k, str(home))
     monkeypatch.setenv("AGENTIC_OS_APPROVAL_SECRET", secrets.token_hex(32))
+    # Kernel >= v0.4.0: an operator's /invoke refuses a caller without the control token (503 when none is configured). The runtime's HTTP client
+    # sends the configured one itself; tests that post to /invoke directly send it too.
+    monkeypatch.setenv("AGENTIC_OS_CONTROL_TOKEN", secrets.token_hex(32))
+
