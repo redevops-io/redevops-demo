@@ -134,19 +134,36 @@ missions over `POST /invoke`, without importing the operator code (see
 `agentic-os/deploy/sidekick-devops/federation.py`).
 
 ```bash
+# Once: a control token and an approval secret for this checkout (kernel >= v0.4.0 refuses every mission endpoint and every operator
+# /invoke without them). Writes deploy/.env (mode 600, not committed) and prints the token.
+./scripts/demo-env.sh
+
 # $0 dry run (default, SIM=1) — every operator short-circuits to its in-process simulator.
 # Ports are published on 127.0.0.1 only.
-docker compose -f deploy/compose.demo.yml up --build
+docker compose --env-file deploy/.env -f deploy/compose.demo.yml up --build
 
 # Real mode (explicit opt-in, SIM=0): operators shell out to terraform/aws/kubectl.
 # Sidekick injects Vault→STS short-lived creds before the provision gate.
-SIM=0 docker compose -f deploy/compose.demo.yml up --build
+SIM=0 docker compose --env-file deploy/.env -f deploy/compose.demo.yml up --build
 ```
-Then open the Projects cockpit at http://localhost:8000/cockpit (this `deploy/compose.demo.yml` publishes 8000; the root `compose.yml` used by `scripts/up.sh` publishes 8080) and start the deploy mission — it
-plans + scans, pauses at the provision approval gate with the terraform plan + cost estimate, then
-provisions → configures → verifies across the federated operators. The `agentic_os` kernel is a pinned pip dependency
+Then open the Projects cockpit at http://localhost:8000/cockpit (this `deploy/compose.demo.yml` publishes 8000; the root `compose.yml` used by `scripts/up.sh` publishes 8080) and paste the control token into the token field ("Use token"; it is held in memory, so paste it again after a reload).
+
+What the cockpit does today, checked in a browser against this stack at kernel `v0.4.2` (2026-11-24):
+
+- It lists missions and the approval inbox, and shows each waiting approval with its evidence.
+- Its template menu has no deploy entry. Start the deploy mission through the same API the cockpit uses:
+  `curl -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -X POST localhost:8000/missions -d '{"goal":"Deploy the redevops-demo repo to AWS","template":"deploy_app","policy_refs":["infra:read","infra:write","scan:read","ecr:read"]}'`.
+  It scans through the federated edge-sentinel operator, plans, and waits in the inbox at the provision gate.
+- **Approving the provision gate in the cockpit ends the mission as failed.** The kernel applies a plan only when the approval carries the digest
+  of the plan the approver saw, and the cockpit's Approve button sends none. Until the kernel's cockpit can do that, run the whole mission with
+  `SIM=1 python -m missions.deploy_operate` (below), which passes the digest.
+
+Sidekick trusts exactly the five operators listed in `operators/trusted-sources`: to the kernel a federated operator is a third-party capability
+source, visible but not usable until its source is trusted. The `agentic_os` kernel is a pinned pip dependency
 (`pip install -e .`); `AGENTIC_OS_ROOT` still overrides it with a source checkout, which is also needed for the
 kernel's `apps/` operators (e.g. `infra`), as they are not shipped in the wheel. Defaults to a sibling `agentic-os` checkout.
+The Sidekick image needs a kernel checkout whose `deploy/sidekick-devops/Dockerfile` copies `federation.py` (agentic-os #756); at `v0.4.2` it
+does not, and the cockpit container restarts in a loop.
 
 | service | port | operator |
 |---|---|---|
