@@ -57,7 +57,13 @@ services:
       <<: *operator-env
       OPERATOR: infra
       PORT: "8230"
-      INFRA_DEPLOY_ROOT: /app/infra/terraform/envs/aws   # what `provision` plans/applies
+      # The kernel's infra operator reads <INFRA_DEPLOY_ROOT>/terraform/envs/<cloud> and writes the saved plan there (the file whose digest the
+      # approval is bound to). /app is mounted read-only, so the operator works on a copy under /work: without a writable plan directory no
+      # plan file exists, the plan has no digest, and no approval can ever apply it.
+      INFRA_DEPLOY_ROOT: /work/infra
+    command: ["sh", "-c", "mkdir -p /work/infra && cp -R /app/infra/terraform /work/infra/terraform && exec uvicorn operators.service:app --host 0.0.0.0 --port $${PORT}"]
+    tmpfs:
+      - /work
     ports: ["127.0.0.1:8230:8230"]
 
   edge-sentinel:
@@ -92,6 +98,9 @@ services:
       # asks for the control token too ("Use token"); without one every mission endpoint answers 503.
       AGENTIC_OS_CONTROL_TOKEN: ${AGENTIC_OS_CONTROL_TOKEN:?run scripts/demo-env.sh first (it writes deploy/.env)}
       AGENTIC_OS_APPROVAL_SECRET: ${AGENTIC_OS_APPROVAL_SECRET:?run scripts/demo-env.sh first (it writes deploy/.env)}
+      # The Sidekick image (kernel >= v0.4.3) does not start without an explicit profile. demo-env.sh writes `development`: this stack is a
+      # simulation where authority envelopes are not enforced. For real infrastructure use `production` with durable authority and replay stores.
+      AGENTIC_OS_PROFILE: ${AGENTIC_OS_PROFILE:?run scripts/demo-env.sh first (it writes deploy/.env)}
       MODEL_ENDPOINT: ${MODEL_ENDPOINT:-}
       SIDEKICK_MODULES: /app/modules.yaml         # → federate the five operators
       # A federated operator is a third-party capability source to the kernel: listed, but not bindable until its source is trusted. This file

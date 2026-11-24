@@ -148,22 +148,22 @@ SIM=0 docker compose --env-file deploy/.env -f deploy/compose.demo.yml up --buil
 ```
 Then open the Projects cockpit at http://localhost:8000/cockpit (this `deploy/compose.demo.yml` publishes 8000; the root `compose.yml` used by `scripts/up.sh` publishes 8080) and paste the control token into the token field ("Use token"; it is held in memory, so paste it again after a reload).
 
-What the cockpit does today, checked in a browser against this stack at kernel `v0.4.2` (2026-11-24):
+The whole deploy workflow, checked in a browser against this stack at kernel `v0.4.3` (2026-11-24, `SIM=1`):
 
-- It lists missions and the approval inbox, and shows each waiting approval with its evidence.
-- Its template menu has no deploy entry. Start the deploy mission through the same API the cockpit uses:
-  `curl -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -X POST localhost:8000/missions -d '{"goal":"Deploy the redevops-demo repo to AWS","template":"deploy_app","policy_refs":["infra:read","infra:write","scan:read","ecr:read"]}'`.
-  It scans through the federated edge-sentinel operator, plans, and waits in the inbox at the provision gate.
-- **Approving the provision gate in the cockpit ends the mission as failed.** The kernel applies a plan only when the approval carries the digest
-  of the plan the approver saw, and the cockpit's Approve button sends none. Until the kernel's cockpit can do that, run the whole mission with
-  `SIM=1 python -m missions.deploy_operate` (below), which passes the digest.
+1. Paste the token, choose the `deploy_app` template, give the mission a goal and press Launch.
+2. The mission scans through the federated edge-sentinel operator, plans through the infra operator, and waits in the inbox at the provision gate.
+3. The inbox item shows the digest of the saved plan. **Approve** sends that digest with the approval; the infra operator re-hashes the plan on
+   its disk and applies it only when they match. Then configure and verify run and the mission ends succeeded.
+
+Also checked there: **Reject** provisions nothing; a plan changed after it was shown is refused (`plan_digest_mismatch`, shown under "Why it
+failed"); with the infra operator stopped the mission fails and nothing is recorded as provisioned.
 
 Sidekick trusts exactly the five operators listed in `operators/trusted-sources`: to the kernel a federated operator is a third-party capability
-source, visible but not usable until its source is trusted. The `agentic_os` kernel is a pinned pip dependency
-(`pip install -e .`); `AGENTIC_OS_ROOT` still overrides it with a source checkout, which is also needed for the
-kernel's `apps/` operators (e.g. `infra`), as they are not shipped in the wheel. Defaults to a sibling `agentic-os` checkout.
-The Sidekick image needs a kernel checkout whose `deploy/sidekick-devops/Dockerfile` copies `federation.py` (agentic-os #756); at `v0.4.2` it
-does not, and the cockpit container restarts in a loop.
+source, visible but not usable until its source is trusted. `scripts/demo-env.sh` also writes `AGENTIC_OS_PROFILE=development`: the Sidekick
+image does not start without an explicit profile, and this stack is a simulation where authority envelopes are not enforced. The infra operator
+works on a copy of `infra/terraform` under `/work`, because the saved plan (the file the approval is bound to) has to be written somewhere.
+The `agentic_os` kernel is a pinned pip dependency (`pip install -e .`); `AGENTIC_OS_ROOT` still overrides it with a source checkout at the
+same tag, which the compose needs for the Sidekick image and the kernel's `apps/` operators (they are not in the wheel).
 
 | service | port | operator |
 |---|---|---|
